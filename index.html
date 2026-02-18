@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sprite Sheet Tool</title>
   <script type="module">
-    import { removeBackground } from 'https://esm.run/@imgly/background-removal@1.7.0';
+    import { removeBackground, preload } from 'https://esm.run/@imgly/background-removal@1.7.0';
     window.removeBackground = removeBackground;
+    window.preloadRemoveBackground = preload;
   </script>
 
   <style>
@@ -683,19 +683,8 @@
         <input type="number" id="videoFpsInput" min="1" max="60" value="12">
       </div>
     </div>
-
-    <div class="frame-size-section">
-      <div class="frame-size-control">
-        <label for="frameWidthInput">Frame Width (px)</label>
-        <input type="number" id="frameWidthInput" min="1" value="0">
-      </div>
-      <div class="frame-size-control">
-        <label for="frameHeightInput">Frame Height (px)</label>
-        <input type="number" id="frameHeightInput" min="1" value="0">
-      </div>
-    </div>
-
-    <div class="padding-controls-section">
+	
+	<div class="padding-controls-section">
       <div class="padding-controls">
         <div class="padding-control">
           <label for="paddingTopInput">Top (px)</label>
@@ -713,6 +702,17 @@
           <label for="paddingLeftInput">Left (px)</label>
           <input type="number" id="paddingLeftInput" min="0" value="0">
         </div>
+      </div>
+    </div>
+
+    <div class="frame-size-section">
+      <div class="frame-size-control">
+        <label for="frameWidthInput">Frame Width (px)</label>
+        <input type="number" id="frameWidthInput" min="1" value="0">
+      </div>
+      <div class="frame-size-control">
+        <label for="frameHeightInput">Frame Height (px)</label>
+        <input type="number" id="frameHeightInput" min="1" value="0">
       </div>
     </div>
 
@@ -828,6 +828,11 @@
       this.backgroundColor = 'transparent';
       this.processedFrames = new Map();
       this.isProcessingBackground = false;
+	  this.removeBackgroundConfig = {
+		device: this.isSecureOrLocalhost() ? "gpu" : "cpu", 
+		proxyToWorker: true,
+	  };
+	  this.removeBackgroundModelInitialized = false;
 
       this.initializeElements();
       this.attachEventListeners();
@@ -837,14 +842,27 @@
 	  if (typeof window.removeBackground === 'undefined') {
         console.warn('Background removal library not yet loaded. It will be available after a moment.');
         // Wait for library to load
+		
+		            console.error('Background removal library failed to load');
+
         setTimeout(() => {
           if (typeof window.removeBackground === 'undefined') {
             console.error('Background removal library failed to load');
-          }
+          } else {
+			this.preloadBackgroundRemovalModel();
+		  }
         }, 3000);
-      }
-
+      } else {
+		this.preloadBackgroundRemovalModel();
+	  }
     }
+	
+	async preloadBackgroundRemovalModel() {
+		console.log('initializing background removal model...');
+		await window.preloadRemoveBackground(this.removeBackgroundConfig);
+		console.log('Background removal model initialized');
+		this.removeBackgroundModelInitialized = true;
+	}
 
     initializeElements() {
       this.dropZone = document.getElementById('dropZone');
@@ -953,8 +971,8 @@
         this.processAllFramesBackground();
       } else {
         this.processedFrames.clear();
-        this.updatePreviewBackgroundColor();
       }
+	  this.updatePreviewBackgroundColor();
     }
 
     updateBackgroundColor() {
@@ -1039,30 +1057,10 @@
 
         // Convert canvas to blob for processing
         const blob = await this.canvasToBlob(canvas);
-		const base64Uri = await this.blobToBase64Uri(blob);
         
         // Use the global removeBackground function from the library
 		
-		const config = {
-		  // 1. Wähle ein kleineres, optimiertes Modell (Standard ist oft zu schwer)
-		  publicPath: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/",
-		  model: "isnet_quint8", 
-
-		  // 2. Nutze WebGPU für maximale Geschwindigkeit (bis zu 20x schneller als CPU)
-		  // Falls WebGPU nicht verfügbar ist, fällt die Library automatisch auf WebGL zurück.
-		  device: "gpu", 
-
-		  // 3. Verringere die Rechenlast durch kleinere Auflösung (Proxy-Verarbeitung)
-		  // Ein Wert von 256 oder 512 reicht oft für eine saubere Maske aus.
-		  proxyToWorker: true, // Berechnet in einem Web Worker, um UI-Lags zu vermeiden
-
-		  // 4. Fortschrittsanzeige für bessere UX
-		  onProgress: (handle, progress) => {
-			console.log(`Laden: ${Math.round(progress * 100)}%`);
-		  }
-		};
-		
-        const result = await window.removeBackground(base64Uri, config);
+        const result = await window.removeBackground(blob, this.removeBackgroundConfig);
         this.processedFrames.set(frameIndex, result);
       } catch (error) {
         console.error(`Error processing frame ${frameIndex}:`, error);
@@ -1070,15 +1068,11 @@
       }
     }
 	
-	blobToBase64Uri(blob){
-	  return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => {
-		  resolve(reader.result);
-		};
-		reader.onerror = reject;
-		reader.readAsDataURL(blob);
-	  });
+	isSecureOrLocalhost() {
+	  const protocol = window.location.protocol;
+	  const hostname = window.location.hostname;
+	  
+	  return protocol === "https:" || hostname === "localhost" || hostname === "127.0.0.1";
 	}
 
     canvasToBlob(canvas) {
