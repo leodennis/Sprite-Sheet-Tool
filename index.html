@@ -640,12 +640,35 @@
       bottom: 0;
       background: rgba(0, 0, 0, 0.5);
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       border-radius: 10px;
       z-index: 10;
       color: white;
       font-weight: 600;
+      gap: 10px;
+    }
+
+    .bg-removal-progress {
+      width: 80%;
+      max-width: 300px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .bg-removal-progress-fill {
+      height: 100%;
+      background: #667eea;
+      width: 0%;
+      transition: width 0.3s;
+      border-radius: 4px;
+    }
+
+    .bg-removal-text {
+      font-size: 14px;
     }
   </style>
 </head>
@@ -827,7 +850,14 @@
       this.removeBackground = false;
       this.backgroundColor = 'transparent';
       this.processedFrames = new Map();
+      this.processedFrameCanvasCache = new Map();
+      this.videoFrameImageCache = new Map();
       this.isProcessingBackground = false;
+      this.isRendering = false;
+      this.offscreenCanvas = null;
+      this.offscreenCtx = null;
+      this.lastCanvasWidth = 0;
+      this.lastCanvasHeight = 0;
 	  this.removeBackgroundConfig = {
 		device: this.isSecureOrLocalhost() ? "gpu" : "cpu", 
 		proxyToWorker: true,
@@ -836,15 +866,10 @@
 
       this.initializeElements();
       this.attachEventListeners();
-      this.updateFrameSizeInputs();
       this.startAnimationLoop();
 	  
 	  if (typeof window.removeBackground === 'undefined') {
         console.warn('Background removal library not yet loaded. It will be available after a moment.');
-        // Wait for library to load
-		
-		            console.error('Background removal library failed to load');
-
         setTimeout(() => {
           if (typeof window.removeBackground === 'undefined') {
             console.error('Background removal library failed to load');
@@ -968,15 +993,19 @@
       
       if (this.removeBackground) {
         this.processedFrames.clear();
+        this.processedFrameCanvasCache.clear();
         this.processAllFramesBackground();
       } else {
         this.processedFrames.clear();
+        this.processedFrameCanvasCache.clear();
+        this.hideBgRemovalProgress();
       }
 	  this.updatePreviewBackgroundColor();
     }
 
     updateBackgroundColor() {
       this.backgroundColor = this.backgroundColorSelect.value;
+      this.processedFrameCanvasCache.clear();
       this.updatePreviewBackgroundColor();
       this.needsRender = true;
     }
@@ -984,10 +1013,12 @@
     updatePreviewBackgroundColor() {
       if (!this.removeBackground) {
         this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
+        this.previewContainer.style.background = '';
         return;
       }
 
       this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
+      this.previewContainer.style.background = '';
       
       if (this.backgroundColor === 'transparent') {
         this.previewContainer.classList.add('bg-transparent');
@@ -1004,16 +1035,57 @@
       if (this.frames.length === 0 && this.mediaType !== 'image') return;
 
       this.isProcessingBackground = true;
+      this.processedFrameCanvasCache.clear();
       const totalFrames = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
       
+      // Show progress overlay
+      this.showBgRemovalProgress(0, totalFrames);
+      
+      let processed = 0;
       for (let i = 0; i < totalFrames; i++) {
-        if (this.processedFrames.has(i)) continue;
+        if (!this.removeBackground) break;
+        if (this.processedFrames.has(i)) {
+          processed++;
+          this.showBgRemovalProgress(processed, totalFrames);
+          continue;
+        }
         await this.processFrameBackground(i);
+        processed++;
+        this.showBgRemovalProgress(processed, totalFrames);
       }
 
       this.isProcessingBackground = false;
+      this.hideBgRemovalProgress();
       this.renderFrameGrid();
       this.needsRender = true;
+    }
+
+    showBgRemovalProgress(current, total) {
+      let overlay = document.getElementById('bgRemovalOverlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'bgRemovalOverlay';
+        overlay.className = 'bg-removal-processing';
+        overlay.innerHTML = `
+          <div class="bg-removal-text">Removing backgrounds... <span id="bgRemovalCount">0</span>/<span id="bgRemovalTotal">0</span></div>
+          <div class="bg-removal-progress">
+            <div class="bg-removal-progress-fill" id="bgRemovalFill"></div>
+          </div>
+        `;
+        this.previewContainer.style.position = 'relative';
+        this.previewContainer.appendChild(overlay);
+      }
+      const countEl = document.getElementById('bgRemovalCount');
+      const totalEl = document.getElementById('bgRemovalTotal');
+      const fillEl = document.getElementById('bgRemovalFill');
+      if (countEl) countEl.textContent = current;
+      if (totalEl) totalEl.textContent = total;
+      if (fillEl) fillEl.style.width = (total > 0 ? (current / total) * 100 : 0) + '%';
+    }
+
+    hideBgRemovalProgress() {
+      const overlay = document.getElementById('bgRemovalOverlay');
+      if (overlay) overlay.remove();
     }
 
     async processFrameBackground(frameIndex) {
@@ -1040,19 +1112,12 @@
             this.frameHeight
           );
         } else if (this.mediaType === 'video') {
-          const frameData = this.frames[frameIndex];
-          const img = new Image();
-          
-          await new Promise((resolve) => {
-            img.onload = () => {
-              canvas.width = this.frameWidth;
-              canvas.height = this.frameHeight;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight);
-              resolve();
-            };
-            img.src = frameData;
-          });
+          const img = await this.getVideoFrameImage(frameIndex);
+          if (!img) return;
+          canvas.width = this.frameWidth;
+          canvas.height = this.frameHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight);
         }
 
         // Convert canvas to blob for processing
@@ -1076,8 +1141,14 @@
 	}
 
     canvasToBlob(canvas) {
-      return new Promise((resolve) => {
-        canvas.toBlob(resolve);
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to create blob from canvas'));
+          }
+        }, 'image/png');
       });
     }
 
@@ -1086,10 +1157,16 @@
         return null;
       }
 
+      // Build a cache key that includes dimensions and background color
+      const cacheKey = `${frameIndex}_${this.displayFrameWidth}_${this.displayFrameHeight}_${this.backgroundColor}`;
+      if (this.processedFrameCanvasCache.has(cacheKey)) {
+        return this.processedFrameCanvasCache.get(cacheKey);
+      }
+
       const blob = this.processedFrames.get(frameIndex);
       const url = URL.createObjectURL(blob);
       
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
@@ -1112,9 +1189,31 @@
           
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           URL.revokeObjectURL(url);
+          this.processedFrameCanvasCache.set(cacheKey, canvas);
           resolve(canvas);
         };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        };
         img.src = url;
+      });
+    }
+
+    getVideoFrameImage(frameIndex) {
+      if (this.videoFrameImageCache.has(frameIndex)) {
+        return Promise.resolve(this.videoFrameImageCache.get(frameIndex));
+      }
+      const frameData = this.frames[frameIndex];
+      if (!frameData) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          this.videoFrameImageCache.set(frameIndex, img);
+          resolve(img);
+        };
+        img.onerror = () => resolve(null);
+        img.src = frameData;
       });
     }
 
@@ -1163,9 +1262,14 @@
           this.mediaType = 'image';
           this.frames = [];
           this.processedFrames.clear();
+          this.processedFrameCanvasCache.clear();
+          this.videoFrameImageCache.clear();
           this.removeBackgroundCheckbox.checked = false;
           this.removeBackground = false;
           this.backgroundColorSelect.classList.remove('visible');
+          this.hideBgRemovalProgress();
+          this.lastCanvasWidth = 0;
+          this.lastCanvasHeight = 0;
           this.analyzeImage();
           this.updateGridVisibility();
           this.updateFrameSizeInputs();
@@ -1188,9 +1292,14 @@
       this.media = null;
       this.frames = [];
       this.processedFrames.clear();
+      this.processedFrameCanvasCache.clear();
+      this.videoFrameImageCache.clear();
       this.removeBackgroundCheckbox.checked = false;
       this.removeBackground = false;
       this.backgroundColorSelect.classList.remove('visible');
+      this.hideBgRemovalProgress();
+      this.lastCanvasWidth = 0;
+      this.lastCanvasHeight = 0;
       this.updateGridVisibility();
     }
 
@@ -1219,6 +1328,7 @@
       const extractNextFrame = (index) => {
         if (index >= frameTimestamps.length) {
           this.frames = extractedFrames;
+          this.videoFrameImageCache.clear();
           this.processingIndicator.style.display = 'none';
           this.frameWidth = this.videoElement.videoWidth;
           this.frameHeight = this.videoElement.videoHeight;
@@ -1311,7 +1421,7 @@
     }
 
     updateFrameSizeInputs() {
-      if (this.mediaType === 'image') {
+      if (this.mediaType === 'image' && this.media) {
         const width = this.media.width;
         const height = this.media.height;
         this.rows = parseInt(this.rowsInput.value);
@@ -1334,6 +1444,7 @@
 
       this.displayFrameWidth = newWidth;
       this.displayFrameHeight = newHeight;
+      this.processedFrameCanvasCache.clear();
 
       this.renderFrameGrid();
       this.updateStats();
@@ -1346,6 +1457,7 @@
       this.paddingBottom = parseInt(this.paddingBottomInput.value) || 0;
       this.paddingLeft = parseInt(this.paddingLeftInput.value) || 0;
 
+      this.processedFrameCanvasCache.clear();
       this.renderFrameGrid();
       this.needsRender = true;
     }
@@ -1366,8 +1478,8 @@
       }
 
       if (this.mediaType === 'image') {
-        this.rows = parseInt(this.rowsInput.value);
-        this.columns = parseInt(this.columnsInput.value);
+        this.rows = Math.max(1, parseInt(this.rowsInput.value) || 1);
+        this.columns = Math.max(1, parseInt(this.columnsInput.value) || 1);
         this.frameWidth = this.media.width / this.columns;
         this.frameHeight = this.media.height / this.rows;
         this.displayFrameWidth = this.frameWidth;
@@ -1375,6 +1487,8 @@
         this.frameWidthInput.value = Math.round(this.displayFrameWidth);
         this.frameHeightInput.value = Math.round(this.displayFrameHeight);
 
+        this.processedFrames.clear();
+        this.processedFrameCanvasCache.clear();
         this.selectedFrames.clear();
         this.selectAll();
         this.renderFrameGrid();
@@ -1399,7 +1513,7 @@
 
       for (let i = 0; i < totalFrames; i++) {
         const frameDiv = document.createElement('div');
-        frameDiv.className = 'frame-item included';
+        frameDiv.className = this.selectedFrames.has(i) ? 'frame-item included' : 'frame-item excluded';
         frameDiv.dataset.frameIndex = i;
 
         const frameCanvas = document.createElement('canvas');
@@ -1472,7 +1586,7 @@
     renderVideoFrameGrid() {
       this.frames.forEach((frameData, i) => {
         const frameDiv = document.createElement('div');
-        frameDiv.className = 'frame-item included';
+        frameDiv.className = this.selectedFrames.has(i) ? 'frame-item included' : 'frame-item excluded';
         frameDiv.dataset.frameIndex = i;
 
         const frameCanvas = document.createElement('canvas');
@@ -1590,8 +1704,9 @@
 
     updateSlider() {
       const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
-      this.frameSlider.max = selectedArray.length;
+      this.frameSlider.max = Math.max(0, selectedArray.length - 1);
       this.frameSlider.value = 0;
+      this.currentFrame = 0;
       this.lastRenderedFrame = -1;
     }
 
@@ -1616,8 +1731,9 @@
         return;
       }
 
-      const frameIndex = selectedArray[this.currentFrame];
-      const selectionIndex = this.currentFrame + 1;
+      const safeFrame = Math.min(this.currentFrame, selectedArray.length - 1);
+      const frameIndex = selectedArray[safeFrame];
+      const selectionIndex = safeFrame + 1;
       this.previewTitle.textContent = `Animation Preview - Frame ${selectionIndex}/${selectedArray.length} (Frame selection: ${frameIndex + 1})`;
     }
 
@@ -1632,11 +1748,7 @@
 
       if (selectedArray.length === 0) return;
 
-      if (sliderValue >= selectedArray.length) {
-        this.currentFrame = 0;
-      } else {
-        this.currentFrame = sliderValue;
-      }
+      this.currentFrame = Math.min(sliderValue, selectedArray.length - 1);
 
       this.updatePreviewTitle();
       this.needsRender = true;
@@ -1656,12 +1768,17 @@
     }
 
     startAnimationLoop() {
-      setInterval(() => {
+      const loop = () => {
+        requestAnimationFrame(loop);
+
+        if (this.isRendering) return;
+
         // Handle slider dragging render
         if (this.needsRender) {
           const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
           if (selectedArray.length > 0) {
-            this.renderPreview(selectedArray);
+            this.isRendering = true;
+            this.renderPreview(selectedArray).finally(() => { this.isRendering = false; });
           }
           this.needsRender = false;
           return;
@@ -1690,13 +1807,15 @@
           if (this.lastRenderedFrame !== this.currentFrame) {
             this.lastRenderedFrame = this.currentFrame;
             this.updatePreviewTitle();
-            this.renderPreview(selectedArray);
+            this.isRendering = true;
+            this.renderPreview(selectedArray).finally(() => { this.isRendering = false; });
             this.frameSlider.value = this.currentFrame;
           }
 
           this.lastFrameTime = now;
         }
-      }, 16);
+      };
+      requestAnimationFrame(loop);
     }
 
     async renderPreview(selectedFrames = null) {
@@ -1705,35 +1824,50 @@
       }
 
       if ((this.mediaType === 'image' && !this.media) || (this.mediaType === 'video' && this.frames.length === 0) || selectedFrames.length === 0) {
-        this.previewCanvas.width = 200;
-        this.previewCanvas.height = 200;
+        if (this.previewCanvas.width !== 200 || this.previewCanvas.height !== 200) {
+          this.previewCanvas.width = 200;
+          this.previewCanvas.height = 200;
+        }
         this.previewCtx.fillStyle = '#333';
         this.previewCtx.fillRect(0, 0, 200, 200);
         return;
       }
 
-      const frameIndex = selectedFrames[this.currentFrame];
+      const currentFrame = Math.min(this.currentFrame, selectedFrames.length - 1);
+      const frameIndex = selectedFrames[currentFrame];
+      if (frameIndex === undefined) return;
+
       const totalWidth = this.displayFrameWidth + this.paddingLeft + this.paddingRight;
       const totalHeight = this.displayFrameHeight + this.paddingTop + this.paddingBottom;
 
-      this.previewCanvas.width = totalWidth;
-      this.previewCanvas.height = totalHeight;
-      this.previewCtx.clearRect(0, 0, totalWidth, totalHeight);
+      if (totalWidth <= 0 || totalHeight <= 0) return;
+
+      // Use offscreen canvas to prevent flickering: render fully offscreen, then copy
+      if (!this.offscreenCanvas) {
+        this.offscreenCanvas = document.createElement('canvas');
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+      }
+      if (this.offscreenCanvas.width !== totalWidth || this.offscreenCanvas.height !== totalHeight) {
+        this.offscreenCanvas.width = totalWidth;
+        this.offscreenCanvas.height = totalHeight;
+      }
+      this.offscreenCtx.clearRect(0, 0, totalWidth, totalHeight);
 
       if (this.removeBackground && this.processedFrames.has(frameIndex)) {
         const processedCanvas = await this.getProcessedFrameCanvas(frameIndex);
         if (processedCanvas) {
           if (this.backgroundColor !== 'transparent') {
             if (this.backgroundColor === 'black') {
-              this.previewCtx.fillStyle = '#000000';
+              this.offscreenCtx.fillStyle = '#000000';
             } else if (this.backgroundColor === 'white') {
-              this.previewCtx.fillStyle = '#ffffff';
+              this.offscreenCtx.fillStyle = '#ffffff';
             } else {
-              this.previewCtx.fillStyle = this.backgroundColor;
+              this.offscreenCtx.fillStyle = this.backgroundColor;
             }
-            this.previewCtx.fillRect(0, 0, totalWidth, totalHeight);
+            this.offscreenCtx.fillRect(0, 0, totalWidth, totalHeight);
           }
-          this.previewCtx.drawImage(processedCanvas, this.paddingLeft, this.paddingTop);
+          this.offscreenCtx.drawImage(processedCanvas, this.paddingLeft, this.paddingTop);
+          this.blitToPreview(totalWidth, totalHeight);
           return;
         }
       }
@@ -1742,7 +1876,7 @@
         const row = Math.floor(frameIndex / this.columns);
         const col = frameIndex % this.columns;
 
-        this.previewCtx.drawImage(
+        this.offscreenCtx.drawImage(
           this.media,
           col * this.frameWidth,
           row * this.frameHeight,
@@ -1754,10 +1888,9 @@
           this.displayFrameHeight
         );
       } else if (this.mediaType === 'video') {
-        const frameData = this.frames[frameIndex];
-        const img = new Image();
-        img.onload = () => {
-          this.previewCtx.drawImage(
+        const img = await this.getVideoFrameImage(frameIndex);
+        if (img) {
+          this.offscreenCtx.drawImage(
             img,
             0,
             0,
@@ -1768,14 +1901,27 @@
             this.displayFrameWidth,
             this.displayFrameHeight
           );
-        };
-        img.src = frameData;
+        }
       }
+
+      this.blitToPreview(totalWidth, totalHeight);
+    }
+
+    /** Copy offscreen buffer to visible canvas in a single operation to prevent flickering. */
+    blitToPreview(width, height) {
+      if (this.previewCanvas.width !== width || this.previewCanvas.height !== height) {
+        this.previewCanvas.width = width;
+        this.previewCanvas.height = height;
+      }
+      this.previewCtx.clearRect(0, 0, width, height);
+      this.previewCtx.drawImage(this.offscreenCanvas, 0, 0);
     }
 
     calculateOptimalGrid(frameCount) {
-      const squareRoot = Math.sqrt(frameCount);
-      return { rows: Math.floor(squareRoot), cols: Math.ceil(squareRoot) };
+      if (frameCount <= 0) return { rows: 1, cols: 1 };
+      const cols = Math.ceil(Math.sqrt(frameCount));
+      const rows = Math.ceil(frameCount / cols);
+      return { rows, cols };
     }
 
     exportSprites() {
@@ -1804,11 +1950,9 @@
       }
     }
 
-    exportImageSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight) {
-      let processedCount = 0;
-      const totalToProcess = selectedArray.length;
-
-      selectedArray.forEach((frameIndex, index) => {
+    async exportImageSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight) {
+      for (let index = 0; index < selectedArray.length; index++) {
+        const frameIndex = selectedArray[index];
         const row = Math.floor(frameIndex / this.columns);
         const col = frameIndex % this.columns;
 
@@ -1818,41 +1962,41 @@
         if (this.removeBackground && this.processedFrames.has(frameIndex)) {
           const processedBlob = this.processedFrames.get(frameIndex);
           const url = URL.createObjectURL(processedBlob);
-          const img = new Image();
-          img.onload = () => {
-            if (this.backgroundColor !== 'transparent') {
-              if (this.backgroundColor === 'black') {
-                exportCtx.fillStyle = '#000000';
-              } else if (this.backgroundColor === 'white') {
-                exportCtx.fillStyle = '#ffffff';
-              } else {
-                exportCtx.fillStyle = this.backgroundColor;
+          await new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              if (this.backgroundColor !== 'transparent') {
+                if (this.backgroundColor === 'black') {
+                  exportCtx.fillStyle = '#000000';
+                } else if (this.backgroundColor === 'white') {
+                  exportCtx.fillStyle = '#ffffff';
+                } else {
+                  exportCtx.fillStyle = this.backgroundColor;
+                }
+                exportCtx.fillRect(
+                  exportCol * totalWidth,
+                  exportRow * totalHeight,
+                  totalWidth,
+                  totalHeight
+                );
               }
-              exportCtx.fillRect(
-                exportCol * totalWidth,
-                exportRow * totalHeight,
-                totalWidth,
-                totalHeight
+              exportCtx.drawImage(
+                img,
+                0,
+                0,
+                this.displayFrameWidth,
+                this.displayFrameHeight,
+                exportCol * totalWidth + this.paddingLeft,
+                exportRow * totalHeight + this.paddingTop,
+                this.displayFrameWidth,
+                this.displayFrameHeight
               );
-            }
-            exportCtx.drawImage(
-              img,
-              0,
-              0,
-              this.displayFrameWidth,
-              this.displayFrameHeight,
-              exportCol * totalWidth + this.paddingLeft,
-              exportRow * totalHeight + this.paddingTop,
-              this.displayFrameWidth,
-              this.displayFrameHeight
-            );
-            URL.revokeObjectURL(url);
-            processedCount++;
-            if (processedCount === totalToProcess) {
-              this.downloadCanvas(exportCanvas, exportRows, exportCols);
-            }
-          };
-          img.src = url;
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+            img.src = url;
+          });
         } else {
           exportCtx.drawImage(
             this.media,
@@ -1865,29 +2009,25 @@
             this.displayFrameWidth,
             this.displayFrameHeight
           );
-          processedCount++;
-          if (processedCount === totalToProcess) {
-            this.downloadCanvas(exportCanvas, exportRows, exportCols);
-          }
         }
-      });
+      }
+      this.downloadCanvas(exportCanvas, exportRows, exportCols);
     }
 
-    exportVideoSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight) {
-      let loadedImages = 0;
-      const totalImages = selectedArray.length;
+    async exportVideoSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight) {
+      for (let index = 0; index < selectedArray.length; index++) {
+        const frameIndex = selectedArray[index];
 
-      selectedArray.forEach((frameIndex, index) => {
-        const frameData = this.frames[frameIndex];
-        const img = new Image();
+        const exportRow = Math.floor(index / exportCols);
+        const exportCol = index % exportCols;
 
-        img.onload = () => {
-          const exportRow = Math.floor(index / exportCols);
-          const exportCol = index % exportCols;
+        const img = await this.getVideoFrameImage(frameIndex);
+        if (!img) continue;
 
-          if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-            const processedBlob = this.processedFrames.get(frameIndex);
-            const url = URL.createObjectURL(processedBlob);
+        if (this.removeBackground && this.processedFrames.has(frameIndex)) {
+          const processedBlob = this.processedFrames.get(frameIndex);
+          const url = URL.createObjectURL(processedBlob);
+          await new Promise((resolve) => {
             const processedImg = new Image();
             processedImg.onload = () => {
               if (this.backgroundColor !== 'transparent') {
@@ -1917,37 +2057,34 @@
                 this.displayFrameHeight
               );
               URL.revokeObjectURL(url);
-              loadedImages++;
-              if (loadedImages === totalImages) {
-                this.downloadCanvas(exportCanvas, exportRows, exportCols);
-              }
+              resolve();
             };
+            processedImg.onerror = () => { URL.revokeObjectURL(url); resolve(); };
             processedImg.src = url;
-          } else {
-            exportCtx.drawImage(
-              img,
-              0,
-              0,
-              this.frameWidth,
-              this.frameHeight,
-              exportCol * totalWidth + this.paddingLeft,
-              exportRow * totalHeight + this.paddingTop,
-              this.displayFrameWidth,
-              this.displayFrameHeight
-            );
-            loadedImages++;
-            if (loadedImages === totalImages) {
-              this.downloadCanvas(exportCanvas, exportRows, exportCols);
-            }
-          }
-        };
-
-        img.src = frameData;
-      });
+          });
+        } else {
+          exportCtx.drawImage(
+            img,
+            0,
+            0,
+            this.frameWidth,
+            this.frameHeight,
+            exportCol * totalWidth + this.paddingLeft,
+            exportRow * totalHeight + this.paddingTop,
+            this.displayFrameWidth,
+            this.displayFrameHeight
+          );
+        }
+      }
+      this.downloadCanvas(exportCanvas, exportRows, exportCols);
     }
 
     downloadCanvas(canvas, rows, cols) {
       canvas.toBlob((blob) => {
+        if (!blob) {
+          this.showMessage('Failed to create export image', 'error');
+          return;
+        }
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -1955,7 +2092,7 @@
         link.click();
         URL.revokeObjectURL(url);
         this.showMessage(`Sprites exported successfully as ${rows}x${cols} grid!`, 'success');
-      });
+      }, 'image/png');
     }
 
     showMessage(text, type) {
