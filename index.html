@@ -305,10 +305,11 @@
       border-radius: 8px;
       padding-top: 40px;
       position: relative;
+      grid-column: 1 / -1;
     }
 
     .padding-controls::before {
-      content: 'Padding (from original frame size)';
+      content: 'Padding (applied to resized frame)';
       position: absolute;
       top: 8px;
       left: 15px;
@@ -706,27 +707,6 @@
         <input type="number" id="videoFpsInput" min="1" max="60" value="12">
       </div>
     </div>
-	
-	<div class="padding-controls-section">
-      <div class="padding-controls">
-        <div class="padding-control">
-          <label for="paddingTopInput">Top (px)</label>
-          <input type="number" id="paddingTopInput" min="0" value="0">
-        </div>
-        <div class="padding-control">
-          <label for="paddingRightInput">Right (px)</label>
-          <input type="number" id="paddingRightInput" min="0" value="0">
-        </div>
-        <div class="padding-control">
-          <label for="paddingBottomInput">Bottom (px)</label>
-          <input type="number" id="paddingBottomInput" min="0" value="0">
-        </div>
-        <div class="padding-control">
-          <label for="paddingLeftInput">Left (px)</label>
-          <input type="number" id="paddingLeftInput" min="0" value="0">
-        </div>
-      </div>
-    </div>
 
     <div class="frame-size-section">
       <div class="frame-size-control">
@@ -736,6 +716,25 @@
       <div class="frame-size-control">
         <label for="frameHeightInput">Frame Height (px)</label>
         <input type="number" id="frameHeightInput" min="1" value="0">
+      </div>
+    </div>
+
+    <div class="padding-controls">
+      <div class="padding-control">
+        <label for="paddingTopInput">Top (px)</label>
+        <input type="number" id="paddingTopInput" value="0">
+      </div>
+      <div class="padding-control">
+        <label for="paddingRightInput">Right (px)</label>
+        <input type="number" id="paddingRightInput" value="0">
+      </div>
+      <div class="padding-control">
+        <label for="paddingBottomInput">Bottom (px)</label>
+        <input type="number" id="paddingBottomInput" value="0">
+      </div>
+      <div class="padding-control">
+        <label for="paddingLeftInput">Left (px)</label>
+        <input type="number" id="paddingLeftInput" value="0">
       </div>
     </div>
 
@@ -858,36 +857,37 @@
       this.offscreenCtx = null;
       this.lastCanvasWidth = 0;
       this.lastCanvasHeight = 0;
-	  this.removeBackgroundConfig = {
-		device: this.isSecureOrLocalhost() ? "gpu" : "cpu", 
-		proxyToWorker: true,
-	  };
-	  this.removeBackgroundModelInitialized = false;
+      this.originalAspectRatio = 1;
+      this.removeBackgroundConfig = {
+        device: this.isSecureOrLocalhost() ? "gpu" : "cpu",
+        proxyToWorker: true,
+      };
+      this.removeBackgroundModelInitialized = false;
 
       this.initializeElements();
       this.attachEventListeners();
       this.startAnimationLoop();
-	  
-	  if (typeof window.removeBackground === 'undefined') {
+
+      if (typeof window.removeBackground === 'undefined') {
         console.warn('Background removal library not yet loaded. It will be available after a moment.');
         setTimeout(() => {
           if (typeof window.removeBackground === 'undefined') {
             console.error('Background removal library failed to load');
           } else {
-			this.preloadBackgroundRemovalModel();
-		  }
+            this.preloadBackgroundRemovalModel();
+          }
         }, 3000);
       } else {
-		this.preloadBackgroundRemovalModel();
-	  }
+        this.preloadBackgroundRemovalModel();
+      }
     }
-	
-	async preloadBackgroundRemovalModel() {
-		console.log('initializing background removal model...');
-		await window.preloadRemoveBackground(this.removeBackgroundConfig);
-		console.log('Background removal model initialized');
-		this.removeBackgroundModelInitialized = true;
-	}
+
+    async preloadBackgroundRemovalModel() {
+      console.log('initializing background removal model...');
+      await window.preloadRemoveBackground(this.removeBackgroundConfig);
+      console.log('Background removal model initialized');
+      this.removeBackgroundModelInitialized = true;
+    }
 
     initializeElements() {
       this.dropZone = document.getElementById('dropZone');
@@ -929,16 +929,13 @@
     }
 
     attachEventListeners() {
-      // Drop zone events
       this.dropZone.addEventListener('click', () => this.mediaInput.click());
       this.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
       this.dropZone.addEventListener('dragleave', (e) => this.handleDragLeave(e));
       this.dropZone.addEventListener('drop', (e) => this.handleDrop(e));
 
-      // File input
       this.mediaInput.addEventListener('change', (e) => this.handleMediaUpload(e));
 
-      // Control inputs
       this.rowsInput.addEventListener('change', () => this.updateGrid());
       this.columnsInput.addEventListener('change', () => this.updateGrid());
 
@@ -954,43 +951,36 @@
         }
       });
 
-      // Frame size inputs
-      this.frameWidthInput.addEventListener('change', () => this.updateFrameSize());
-      this.frameHeightInput.addEventListener('change', () => this.updateFrameSize());
+      this.frameWidthInput.addEventListener('input', () => this.updateFrameSize('width'));
+      this.frameHeightInput.addEventListener('input', () => this.updateFrameSize('height'));
 
-      // Padding inputs
       this.paddingTopInput.addEventListener('change', () => this.updatePadding());
       this.paddingRightInput.addEventListener('change', () => this.updatePadding());
       this.paddingBottomInput.addEventListener('change', () => this.updatePadding());
       this.paddingLeftInput.addEventListener('change', () => this.updatePadding());
 
-      // Stretch checkbox
       this.stretchCheckbox.addEventListener('change', () => this.updateStretchPreview());
 
-      // Background removal controls
       this.removeBackgroundCheckbox.addEventListener('change', () => this.toggleBackgroundRemoval());
       this.backgroundColorSelect.addEventListener('change', () => this.updateBackgroundColor());
 
-      // Frame slider
       this.frameSlider.addEventListener('mousedown', () => this.onSliderDragStart());
       this.frameSlider.addEventListener('touchstart', () => this.onSliderDragStart());
       this.frameSlider.addEventListener('input', (e) => this.onSliderInput(e));
       this.frameSlider.addEventListener('mouseup', () => this.onSliderDragEnd());
       this.frameSlider.addEventListener('touchend', () => this.onSliderDragEnd());
 
-      // Button events
       this.selectAllBtn.addEventListener('click', () => this.selectAll());
       this.deselectAllBtn.addEventListener('click', () => this.deselectAll());
       this.exportBtn.addEventListener('click', () => this.exportSprites());
 
-      // Video element event
       this.videoElement.addEventListener('loadedmetadata', () => this.onVideoLoaded());
     }
 
     toggleBackgroundRemoval() {
       this.removeBackground = this.removeBackgroundCheckbox.checked;
       this.backgroundColorSelect.classList.toggle('visible', this.removeBackground);
-      
+
       if (this.removeBackground) {
         this.processedFrames.clear();
         this.processedFrameCanvasCache.clear();
@@ -1000,7 +990,7 @@
         this.processedFrameCanvasCache.clear();
         this.hideBgRemovalProgress();
       }
-	  this.updatePreviewBackgroundColor();
+      this.updatePreviewBackgroundColor();
     }
 
     updateBackgroundColor() {
@@ -1019,7 +1009,7 @@
 
       this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
       this.previewContainer.style.background = '';
-      
+
       if (this.backgroundColor === 'transparent') {
         this.previewContainer.classList.add('bg-transparent');
       } else if (this.backgroundColor === 'black') {
@@ -1037,10 +1027,9 @@
       this.isProcessingBackground = true;
       this.processedFrameCanvasCache.clear();
       const totalFrames = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
-      
-      // Show progress overlay
+
       this.showBgRemovalProgress(0, totalFrames);
-      
+
       let processed = 0;
       for (let i = 0; i < totalFrames; i++) {
         if (!this.removeBackground) break;
@@ -1091,25 +1080,18 @@
     async processFrameBackground(frameIndex) {
       try {
         let canvas = document.createElement('canvas');
-        
+
         if (this.mediaType === 'image') {
           canvas.width = this.frameWidth;
           canvas.height = this.frameHeight;
           const ctx = canvas.getContext('2d');
-          
           const row = Math.floor(frameIndex / this.columns);
           const col = frameIndex % this.columns;
-          
           ctx.drawImage(
             this.media,
-            col * this.frameWidth,
-            row * this.frameHeight,
-            this.frameWidth,
-            this.frameHeight,
-            0,
-            0,
-            this.frameWidth,
-            this.frameHeight
+            col * this.frameWidth, row * this.frameHeight,
+            this.frameWidth, this.frameHeight,
+            0, 0, this.frameWidth, this.frameHeight
           );
         } else if (this.mediaType === 'video') {
           const img = await this.getVideoFrameImage(frameIndex);
@@ -1120,11 +1102,7 @@
           ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight);
         }
 
-        // Convert canvas to blob for processing
         const blob = await this.canvasToBlob(canvas);
-        
-        // Use the global removeBackground function from the library
-		
         const result = await window.removeBackground(blob, this.removeBackgroundConfig);
         this.processedFrames.set(frameIndex, result);
       } catch (error) {
@@ -1132,32 +1110,25 @@
         this.showMessage(`Error processing frame ${frameIndex}`, 'error');
       }
     }
-	
-	isSecureOrLocalhost() {
-	  const protocol = window.location.protocol;
-	  const hostname = window.location.hostname;
-	  
-	  return protocol === "https:" || hostname === "localhost" || hostname === "127.0.0.1";
-	}
+
+    isSecureOrLocalhost() {
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      return protocol === "https:" || hostname === "localhost" || hostname === "127.0.0.1";
+    }
 
     canvasToBlob(canvas) {
       return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Failed to create blob from canvas'));
-          }
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to create blob from canvas'));
         }, 'image/png');
       });
     }
 
     async getProcessedFrameCanvas(frameIndex) {
-      if (!this.removeBackground || !this.processedFrames.has(frameIndex)) {
-        return null;
-      }
+      if (!this.removeBackground || !this.processedFrames.has(frameIndex)) return null;
 
-      // Build a cache key that includes dimensions and background color
       const cacheKey = `${frameIndex}_${this.displayFrameWidth}_${this.displayFrameHeight}_${this.backgroundColor}`;
       if (this.processedFrameCanvasCache.has(cacheKey)) {
         return this.processedFrameCanvasCache.get(cacheKey);
@@ -1165,37 +1136,27 @@
 
       const blob = this.processedFrames.get(frameIndex);
       const url = URL.createObjectURL(blob);
-      
-      return new Promise((resolve, reject) => {
+
+      return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
           canvas.width = this.displayFrameWidth;
           canvas.height = this.displayFrameHeight;
           const ctx = canvas.getContext('2d');
-          
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          
           if (this.backgroundColor !== 'transparent') {
-            if (this.backgroundColor === 'black') {
-              ctx.fillStyle = '#000000';
-            } else if (this.backgroundColor === 'white') {
-              ctx.fillStyle = '#ffffff';
-            } else {
-              ctx.fillStyle = this.backgroundColor;
-            }
+            ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+              : this.backgroundColor === 'white' ? '#ffffff'
+              : this.backgroundColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
-          
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           URL.revokeObjectURL(url);
           this.processedFrameCanvasCache.set(cacheKey, canvas);
           resolve(canvas);
         };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          resolve(null);
-        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
         img.src = url;
       });
     }
@@ -1208,10 +1169,7 @@
       if (!frameData) return Promise.resolve(null);
       return new Promise((resolve) => {
         const img = new Image();
-        img.onload = () => {
-          this.videoFrameImageCache.set(frameIndex, img);
-          resolve(img);
-        };
+        img.onload = () => { this.videoFrameImageCache.set(frameIndex, img); resolve(img); };
         img.onerror = () => resolve(null);
         img.src = frameData;
       });
@@ -1230,7 +1188,6 @@
     handleDrop(e) {
       e.preventDefault();
       this.dropZone.classList.remove('dragover');
-
       const files = e.dataTransfer.files;
       if (files.length > 0) {
         this.mediaInput.files = files;
@@ -1241,11 +1198,8 @@
     handleMediaUpload(e) {
       const files = e.target.files;
       if (files.length === 0) return;
-
       const file = files[0];
-      const isVideo = file.type.startsWith('video/');
-
-      if (isVideo) {
+      if (file.type.startsWith('video/')) {
         this.handleVideoUpload(file);
       } else {
         this.handleImageUpload(file);
@@ -1254,7 +1208,6 @@
 
     handleImageUpload(file) {
       const reader = new FileReader();
-
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
@@ -1272,17 +1225,51 @@
           this.lastCanvasHeight = 0;
           this.analyzeImage();
           this.updateGridVisibility();
+          this.originalAspectRatio = this.frameWidth / this.frameHeight;
           this.updateFrameSizeInputs();
           this.updateGrid();
-          this.showMessage('Image loaded successfully!', 'success');
-        };
-        img.onerror = () => {
-          this.showMessage('Failed to load image', 'error');
+          this.showMessage('Image loaded and scanned for empty frames!', 'success');
         };
         img.src = event.target.result;
       };
-
       reader.readAsDataURL(file);
+    }
+
+    async autoSelectNonEmptyFrames() {
+      this.selectedFrames.clear();
+      const total = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = this.frameWidth;
+      tempCanvas.height = this.frameHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      for (let i = 0; i < total; i++) {
+        tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+        if (this.mediaType === 'image') {
+          const row = Math.floor(i / this.columns);
+          const col = i % this.columns;
+          tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, 0, 0, this.frameWidth, this.frameHeight);
+        } else {
+          const img = await this.getVideoFrameImage(i);
+          if (img) tempCtx.drawImage(img, 0, 0);
+        }
+        if (!this.isFrameEmpty(tempCanvas)) {
+          this.selectedFrames.add(i);
+        }
+      }
+      this.renderFrameGrid();
+      this.updateStats();
+      this.updateSlider();
+      this.startAnimation();
+    }
+
+    isFrameEmpty(canvas) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 3; i < imageData.length; i += 4) {
+        if (imageData[i] > 0) return false;
+      }
+      return true;
     }
 
     handleVideoUpload(file) {
@@ -1312,7 +1299,6 @@
       const fps = parseInt(this.videoFpsInput.value) || 12;
       const videoDuration = this.videoElement.duration;
       const frameTimestamps = [];
-
       const frameInterval = 1 / fps;
       for (let time = 0; time < videoDuration; time += frameInterval) {
         frameTimestamps.push(time);
@@ -1352,62 +1338,150 @@
         const timestamp = frameTimestamps[index];
         this.videoElement.currentTime = timestamp;
 
-        const onSeeked = () => {
+        this.videoElement.addEventListener('seeked', () => {
           const canvas = document.createElement('canvas');
           canvas.width = this.videoElement.videoWidth;
           canvas.height = this.videoElement.videoHeight;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(this.videoElement, 0, 0);
-
-          const imageData = canvas.toDataURL('image/png');
-          extractedFrames.push(imageData);
-
+          extractedFrames.push(canvas.toDataURL('image/png'));
           framesProcessed++;
           this.frameCountDisplay.textContent = framesProcessed;
           this.progressFill.style.width = (framesProcessed / totalFramesToExtract) * 100 + '%';
-
-          this.videoElement.removeEventListener('seeked', onSeeked);
           extractNextFrame(index + 1);
-        };
-
-        this.videoElement.addEventListener('seeked', onSeeked, { once: true });
+        }, { once: true });
       };
 
       extractNextFrame(0);
     }
 
     analyzeImage() {
-      if (!this.media || this.mediaType !== 'image') return;
+      if (!this.media) return;
+      const w = this.media.width;
+      const h = this.media.height;
+      const MAX_DET = 20;
 
-      const width = this.media.width;
-      const height = this.media.height;
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = w;
+      sampleCanvas.height = h;
+      const sampleCtx = sampleCanvas.getContext('2d');
+      sampleCtx.drawImage(this.media, 0, 0);
+      const pixels = sampleCtx.getImageData(0, 0, w, h).data;
 
-      let bestRows = 1;
-      let bestCols = 1;
-      let minDifference = Infinity;
+      const getP = (x, y) => { const i = (y * w + x) * 4; return [pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]]; };
+      const bg = getP(0, 0);
+      const isBg = (x, y) => {
+        const p = getP(x, y);
+        if (p[3] < 10) return true;
+        return Math.sqrt((p[0]-bg[0])**2 + (p[1]-bg[1])**2 + (p[2]-bg[2])**2 + (p[3]-bg[3])**2) < 30;
+      };
 
-      for (let rows = 1; rows <= 10; rows++) {
-        for (let cols = 1; cols <= 10; cols++) {
-          if (width % cols === 0 && height % rows === 0) {
-            const frameWidth = width / cols;
-            const frameHeight = height / rows;
-            const diff = Math.abs(frameWidth - frameHeight);
+      const colLum   = new Float32Array(w);
+      const colEmpty = new Float32Array(w);
+      const rowLum   = new Float32Array(h);
+      const rowEmpty = new Float32Array(h);
 
-            if (diff < minDifference) {
-              minDifference = diff;
-              bestRows = rows;
-              bestCols = cols;
+      for (let x = 0; x < w; x++) {
+        let lum = 0, empty = 0;
+        for (let y = 0; y < h; y++) {
+          const i = (y * w + x) * 4;
+          lum += 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
+          if (isBg(x, y)) empty++;
+        }
+        colLum[x]   = lum / h;
+        colEmpty[x] = empty / h;
+      }
+      for (let y = 0; y < h; y++) {
+        let lum = 0, empty = 0;
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          lum += 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
+          if (isBg(x, y)) empty++;
+        }
+        rowLum[y]   = lum / w;
+        rowEmpty[y] = empty / w;
+      }
+
+      const scoreEmptiness = (profile, N, size) => {
+        if (N === 1) return 0;
+        let score = 0;
+        for (let i = 1; i < N; i++) {
+          const x = Math.round((size / N) * i);
+          let v = 0, c = 0;
+          for (let d = -2; d <= 2; d++) {
+            const xi = x + d;
+            if (xi >= 0 && xi < size) { v += profile[xi]; c++; }
+          }
+          score += v / c;
+        }
+        return score / (N - 1);
+      };
+
+      const scoreFft = (signal, N, size) => {
+        if (N === 1) return 0;
+        const mean = signal.reduce((a, b) => a + b, 0) / size;
+        let re = 0, im = 0;
+        for (let i = 0; i < size; i++) {
+          const a = 2 * Math.PI * N * i / size;
+          re += (signal[i] - mean) * Math.cos(a);
+          im += (signal[i] - mean) * Math.sin(a);
+        }
+        const mag = Math.sqrt(re * re + im * im) / size;
+        const dc  = signal.reduce((a, b) => a + Math.abs(b - mean), 0) / size;
+        return dc > 0 ? mag / dc : 0;
+      };
+
+      const findBest = (lum, empty, size) => {
+        const emptyScores = new Float32Array(MAX_DET + 1);
+        const fftScores   = new Float32Array(MAX_DET + 1);
+
+        for (let n = 1; n <= MAX_DET; n++) {
+          emptyScores[n] = scoreEmptiness(empty, n, size);
+          fftScores[n]   = scoreFft(lum, n, size);
+        }
+
+        const normalize = (arr) => {
+          let mn = Infinity, mx = -Infinity;
+          for (let n = 1; n <= MAX_DET; n++) { if (arr[n] < mn) mn = arr[n]; if (arr[n] > mx) mx = arr[n]; }
+          const r = mx - mn || 1;
+          const out = new Float32Array(MAX_DET + 1);
+          for (let n = 1; n <= MAX_DET; n++) out[n] = (arr[n] - mn) / r;
+          return out;
+        };
+
+        const normEmpty = normalize(emptyScores);
+        const normFft   = normalize(fftScores);
+
+        const combined = new Float32Array(MAX_DET + 1);
+        for (let n = 1; n <= MAX_DET; n++) {
+          combined[n] = normEmpty[n] * 0.5 + normFft[n] * 0.5;
+        }
+
+        // Harmonic rejection: prefer N over its sub-harmonics when N scores nearly as well
+        const HARMONIC_THRESHOLD = 0.75;
+        const rejected = new Set();
+        for (let n = 2; n <= MAX_DET; n++) {
+          for (let multiple = n * 2; multiple <= MAX_DET; multiple += n) {
+            if (combined[multiple] >= combined[n] * HARMONIC_THRESHOLD) {
+              rejected.add(n);
             }
           }
         }
-      }
 
-      this.rowsInput.value = bestRows;
-      this.columnsInput.value = bestCols;
-      this.frameWidth = width / bestCols;
-      this.frameHeight = height / bestRows;
-      this.displayFrameWidth = this.frameWidth;
-      this.displayFrameHeight = this.frameHeight;
+        let bestN = 1, bestScore = -Infinity;
+        for (let n = 1; n <= MAX_DET; n++) {
+          if (rejected.has(n)) continue;
+          if (combined[n] > bestScore) {
+            bestScore = combined[n];
+            bestN = n;
+          }
+        }
+
+        return bestN;
+      };
+
+      this.columnsInput.value = findBest(colLum, colEmpty, w);
+      this.rowsInput.value    = findBest(rowLum, rowEmpty, h);
     }
 
     updateGridVisibility() {
@@ -1422,41 +1496,38 @@
 
     updateFrameSizeInputs() {
       if (this.mediaType === 'image' && this.media) {
-        const width = this.media.width;
-        const height = this.media.height;
         this.rows = parseInt(this.rowsInput.value);
         this.columns = parseInt(this.columnsInput.value);
-        this.frameWidth = width / this.columns;
-        this.frameHeight = height / this.rows;
-      } else if (this.mediaType === 'video' && this.frameWidth > 0) {
-        // Already set
+        this.frameWidth = this.media.width / this.columns;
+        this.frameHeight = this.media.height / this.rows;
       }
-
       this.displayFrameWidth = this.frameWidth;
       this.displayFrameHeight = this.frameHeight;
       this.frameWidthInput.value = Math.round(this.displayFrameWidth);
       this.frameHeightInput.value = Math.round(this.displayFrameHeight);
     }
 
-    updateFrameSize() {
-      const newWidth = parseInt(this.frameWidthInput.value) || this.frameWidth;
-      const newHeight = parseInt(this.frameHeightInput.value) || this.frameHeight;
-
-      this.displayFrameWidth = newWidth;
-      this.displayFrameHeight = newHeight;
+    updateFrameSize(changedDimension) {
+      if (changedDimension === 'width') {
+        this.displayFrameWidth = parseInt(this.frameWidthInput.value) || 1;
+        this.displayFrameHeight = this.displayFrameWidth / this.originalAspectRatio;
+        this.frameHeightInput.value = Math.round(this.displayFrameHeight);
+      } else {
+        this.displayFrameHeight = parseInt(this.frameHeightInput.value) || 1;
+        this.displayFrameWidth = this.displayFrameHeight * this.originalAspectRatio;
+        this.frameWidthInput.value = Math.round(this.displayFrameWidth);
+      }
       this.processedFrameCanvasCache.clear();
-
       this.renderFrameGrid();
       this.updateStats();
       this.needsRender = true;
     }
 
     updatePadding() {
-      this.paddingTop = parseInt(this.paddingTopInput.value) || 0;
-      this.paddingRight = parseInt(this.paddingRightInput.value) || 0;
+      this.paddingTop    = parseInt(this.paddingTopInput.value)    || 0;
+      this.paddingRight  = parseInt(this.paddingRightInput.value)  || 0;
       this.paddingBottom = parseInt(this.paddingBottomInput.value) || 0;
-      this.paddingLeft = parseInt(this.paddingLeftInput.value) || 0;
-
+      this.paddingLeft   = parseInt(this.paddingLeftInput.value)   || 0;
       this.processedFrameCanvasCache.clear();
       this.renderFrameGrid();
       this.needsRender = true;
@@ -1478,29 +1549,27 @@
       }
 
       if (this.mediaType === 'image') {
-        this.rows = Math.max(1, parseInt(this.rowsInput.value) || 1);
+        this.rows    = Math.max(1, parseInt(this.rowsInput.value)    || 1);
         this.columns = Math.max(1, parseInt(this.columnsInput.value) || 1);
-        this.frameWidth = this.media.width / this.columns;
+        this.frameWidth  = this.media.width  / this.columns;
         this.frameHeight = this.media.height / this.rows;
-        this.displayFrameWidth = this.frameWidth;
+
+        this.originalAspectRatio = this.frameWidth / this.frameHeight;
+        this.displayFrameWidth  = this.frameWidth;
         this.displayFrameHeight = this.frameHeight;
-        this.frameWidthInput.value = Math.round(this.displayFrameWidth);
+        this.frameWidthInput.value  = Math.round(this.displayFrameWidth);
         this.frameHeightInput.value = Math.round(this.displayFrameHeight);
 
         this.processedFrames.clear();
         this.processedFrameCanvasCache.clear();
-        this.selectedFrames.clear();
-        this.selectAll();
-        this.renderFrameGrid();
-        this.updateSlider();
-        this.updateStats();
-        this.startAnimation();
+
+        // Scan frames and deselect empty ones automatically
+        this.autoSelectNonEmptyFrames();
       }
     }
 
     renderFrameGrid() {
       this.framesGrid.innerHTML = '';
-
       if (this.mediaType === 'image') {
         this.renderImageFrameGrid();
       } else if (this.mediaType === 'video') {
@@ -1510,19 +1579,17 @@
 
     renderImageFrameGrid() {
       const totalFrames = this.rows * this.columns;
-
       for (let i = 0; i < totalFrames; i++) {
         const frameDiv = document.createElement('div');
         frameDiv.className = this.selectedFrames.has(i) ? 'frame-item included' : 'frame-item excluded';
         frameDiv.dataset.frameIndex = i;
 
         const frameCanvas = document.createElement('canvas');
-        const totalWidth = this.displayFrameWidth + this.paddingLeft + this.paddingRight;
-        const totalHeight = this.displayFrameHeight + this.paddingTop + this.paddingBottom;
-        frameCanvas.width = totalWidth;
+        const totalWidth  = this.displayFrameWidth  + this.paddingLeft + this.paddingRight;
+        const totalHeight = this.displayFrameHeight + this.paddingTop  + this.paddingBottom;
+        frameCanvas.width  = totalWidth;
         frameCanvas.height = totalHeight;
         const ctx = frameCanvas.getContext('2d');
-
         ctx.clearRect(0, 0, totalWidth, totalHeight);
 
         const row = Math.floor(i / this.columns);
@@ -1534,41 +1601,17 @@
           const img = new Image();
           img.onload = () => {
             if (this.backgroundColor !== 'transparent') {
-              if (this.backgroundColor === 'black') {
-                ctx.fillStyle = '#000000';
-              } else if (this.backgroundColor === 'white') {
-                ctx.fillStyle = '#ffffff';
-              } else {
-                ctx.fillStyle = this.backgroundColor;
-              }
+              ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+                : this.backgroundColor === 'white' ? '#ffffff'
+                : this.backgroundColor;
               ctx.fillRect(0, 0, totalWidth, totalHeight);
             }
-            ctx.drawImage(
-              img,
-              0,
-              0,
-              this.displayFrameWidth,
-              this.displayFrameHeight,
-              this.paddingLeft,
-              this.paddingTop,
-              this.displayFrameWidth,
-              this.displayFrameHeight
-            );
+            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
             URL.revokeObjectURL(url);
           };
           img.src = url;
         } else {
-          ctx.drawImage(
-            this.media,
-            col * this.frameWidth,
-            row * this.frameHeight,
-            this.frameWidth,
-            this.frameHeight,
-            this.paddingLeft,
-            this.paddingTop,
-            this.displayFrameWidth,
-            this.displayFrameHeight
-          );
+          ctx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
         }
 
         const frameNumber = document.createElement('div');
@@ -1578,7 +1621,6 @@
         frameDiv.appendChild(frameCanvas);
         frameDiv.appendChild(frameNumber);
         frameDiv.addEventListener('click', () => this.toggleFrame(i, frameDiv));
-
         this.framesGrid.appendChild(frameDiv);
       }
     }
@@ -1590,12 +1632,11 @@
         frameDiv.dataset.frameIndex = i;
 
         const frameCanvas = document.createElement('canvas');
-        const totalWidth = this.displayFrameWidth + this.paddingLeft + this.paddingRight;
-        const totalHeight = this.displayFrameHeight + this.paddingTop + this.paddingBottom;
-        frameCanvas.width = totalWidth;
+        const totalWidth  = this.displayFrameWidth  + this.paddingLeft + this.paddingRight;
+        const totalHeight = this.displayFrameHeight + this.paddingTop  + this.paddingBottom;
+        frameCanvas.width  = totalWidth;
         frameCanvas.height = totalHeight;
         const ctx = frameCanvas.getContext('2d');
-
         ctx.clearRect(0, 0, totalWidth, totalHeight);
 
         if (this.removeBackground && this.processedFrames.has(i)) {
@@ -1604,43 +1645,19 @@
           const img = new Image();
           img.onload = () => {
             if (this.backgroundColor !== 'transparent') {
-              if (this.backgroundColor === 'black') {
-                ctx.fillStyle = '#000000';
-              } else if (this.backgroundColor === 'white') {
-                ctx.fillStyle = '#ffffff';
-              } else {
-                ctx.fillStyle = this.backgroundColor;
-              }
+              ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+                : this.backgroundColor === 'white' ? '#ffffff'
+                : this.backgroundColor;
               ctx.fillRect(0, 0, totalWidth, totalHeight);
             }
-            ctx.drawImage(
-              img,
-              0,
-              0,
-              this.displayFrameWidth,
-              this.displayFrameHeight,
-              this.paddingLeft,
-              this.paddingTop,
-              this.displayFrameWidth,
-              this.displayFrameHeight
-            );
+            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
             URL.revokeObjectURL(url);
           };
           img.src = url;
         } else {
           const img = new Image();
           img.onload = () => {
-            ctx.drawImage(
-              img,
-              0,
-              0,
-              this.frameWidth,
-              this.frameHeight,
-              this.paddingLeft,
-              this.paddingTop,
-              this.displayFrameWidth,
-              this.displayFrameHeight
-            );
+            ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
           };
           img.src = frameData;
         }
@@ -1652,31 +1669,30 @@
         frameDiv.appendChild(frameCanvas);
         frameDiv.appendChild(frameNumber);
         frameDiv.addEventListener('click', () => this.toggleFrame(i, frameDiv));
-
         this.framesGrid.appendChild(frameDiv);
       });
     }
 
     toggleFrame(frameIndex, frameDiv) {
+      const wasEmpty = this.selectedFrames.size === 0;
       if (this.selectedFrames.has(frameIndex)) {
         this.selectedFrames.delete(frameIndex);
-        frameDiv.classList.remove('included');
-        frameDiv.classList.add('excluded');
+        frameDiv.classList.replace('included', 'excluded');
       } else {
         this.selectedFrames.add(frameIndex);
-        frameDiv.classList.add('included');
-        frameDiv.classList.remove('excluded');
+        frameDiv.classList.replace('excluded', 'included');
       }
       this.updateStats();
       this.updateSlider();
+      if (wasEmpty && this.selectedFrames.size > 0) {
+        this.startAnimation();
+      }
     }
 
     selectAll() {
       const totalFrames = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
       this.selectedFrames.clear();
-      for (let i = 0; i < totalFrames; i++) {
-        this.selectedFrames.add(i);
-      }
+      for (let i = 0; i < totalFrames; i++) this.selectedFrames.add(i);
       this.updateFrameVisuals();
       this.updateStats();
       this.updateSlider();
@@ -1713,28 +1729,22 @@
     updateStats() {
       const totalFrames = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
       const selectedCount = this.selectedFrames.size;
-      const fps = this.animationFps;
-      const duration = selectedCount > 0 ? (selectedCount / fps).toFixed(2) : 0;
-
+      const duration = selectedCount > 0 ? (selectedCount / this.animationFps).toFixed(2) : 0;
       this.totalFramesDisplay.textContent = totalFrames;
       this.selectedFramesDisplay.textContent = selectedCount;
       this.animDurationDisplay.textContent = duration + 's';
-
       this.exportBtn.disabled = selectedCount === 0;
     }
 
     updatePreviewTitle() {
       const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
-
       if (selectedArray.length === 0) {
         this.previewTitle.textContent = 'Animation Preview';
         return;
       }
-
       const safeFrame = Math.min(this.currentFrame, selectedArray.length - 1);
       const frameIndex = selectedArray[safeFrame];
-      const selectionIndex = safeFrame + 1;
-      this.previewTitle.textContent = `Animation Preview - Frame ${selectionIndex}/${selectedArray.length} (Frame selection: ${frameIndex + 1})`;
+      this.previewTitle.textContent = `Animation Preview - Frame ${safeFrame + 1}/${selectedArray.length} (Frame selection: ${frameIndex + 1})`;
     }
 
     onSliderDragStart() {
@@ -1744,12 +1754,8 @@
 
     onSliderInput(e) {
       const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
-      const sliderValue = parseInt(this.frameSlider.value);
-
       if (selectedArray.length === 0) return;
-
-      this.currentFrame = Math.min(sliderValue, selectedArray.length - 1);
-
+      this.currentFrame = Math.min(parseInt(this.frameSlider.value), selectedArray.length - 1);
       this.updatePreviewTitle();
       this.needsRender = true;
     }
@@ -1770,10 +1776,8 @@
     startAnimationLoop() {
       const loop = () => {
         requestAnimationFrame(loop);
-
         if (this.isRendering) return;
 
-        // Handle slider dragging render
         if (this.needsRender) {
           const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
           if (selectedArray.length > 0) {
@@ -1784,26 +1788,15 @@
           return;
         }
 
-        // Handle animation rendering
         if (!this.animationRunning || this.isSliderDragging) return;
 
         const now = Date.now();
         const elapsed = (now - this.lastFrameTime) / 1000;
-        const frameTime = 1 / this.animationFps;
-
-        if (elapsed >= frameTime) {
+        if (elapsed >= 1 / this.animationFps) {
           this.currentFrame++;
           const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
-
-          if (selectedArray.length === 0) {
-            this.animationRunning = false;
-            return;
-          }
-
-          if (this.currentFrame >= selectedArray.length) {
-            this.currentFrame = 0;
-          }
-
+          if (selectedArray.length === 0) { this.animationRunning = false; return; }
+          if (this.currentFrame >= selectedArray.length) this.currentFrame = 0;
           if (this.lastRenderedFrame !== this.currentFrame) {
             this.lastRenderedFrame = this.currentFrame;
             this.updatePreviewTitle();
@@ -1811,7 +1804,6 @@
             this.renderPreview(selectedArray).finally(() => { this.isRendering = false; });
             this.frameSlider.value = this.currentFrame;
           }
-
           this.lastFrameTime = now;
         }
       };
@@ -1823,11 +1815,11 @@
         selectedFrames = Array.from(this.selectedFrames).sort((a, b) => a - b);
       }
 
-      if ((this.mediaType === 'image' && !this.media) || (this.mediaType === 'video' && this.frames.length === 0) || selectedFrames.length === 0) {
-        if (this.previewCanvas.width !== 200 || this.previewCanvas.height !== 200) {
-          this.previewCanvas.width = 200;
-          this.previewCanvas.height = 200;
-        }
+      if ((this.mediaType === 'image' && !this.media) ||
+          (this.mediaType === 'video' && this.frames.length === 0) ||
+          selectedFrames.length === 0) {
+        this.previewCanvas.width = 200;
+        this.previewCanvas.height = 200;
         this.previewCtx.fillStyle = '#333';
         this.previewCtx.fillRect(0, 0, 200, 200);
         return;
@@ -1837,18 +1829,16 @@
       const frameIndex = selectedFrames[currentFrame];
       if (frameIndex === undefined) return;
 
-      const totalWidth = this.displayFrameWidth + this.paddingLeft + this.paddingRight;
-      const totalHeight = this.displayFrameHeight + this.paddingTop + this.paddingBottom;
-
+      const totalWidth  = this.displayFrameWidth  + this.paddingLeft + this.paddingRight;
+      const totalHeight = this.displayFrameHeight + this.paddingTop  + this.paddingBottom;
       if (totalWidth <= 0 || totalHeight <= 0) return;
 
-      // Use offscreen canvas to prevent flickering: render fully offscreen, then copy
       if (!this.offscreenCanvas) {
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d');
       }
       if (this.offscreenCanvas.width !== totalWidth || this.offscreenCanvas.height !== totalHeight) {
-        this.offscreenCanvas.width = totalWidth;
+        this.offscreenCanvas.width  = totalWidth;
         this.offscreenCanvas.height = totalHeight;
       }
       this.offscreenCtx.clearRect(0, 0, totalWidth, totalHeight);
@@ -1857,13 +1847,9 @@
         const processedCanvas = await this.getProcessedFrameCanvas(frameIndex);
         if (processedCanvas) {
           if (this.backgroundColor !== 'transparent') {
-            if (this.backgroundColor === 'black') {
-              this.offscreenCtx.fillStyle = '#000000';
-            } else if (this.backgroundColor === 'white') {
-              this.offscreenCtx.fillStyle = '#ffffff';
-            } else {
-              this.offscreenCtx.fillStyle = this.backgroundColor;
-            }
+            this.offscreenCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+              : this.backgroundColor === 'white' ? '#ffffff'
+              : this.backgroundColor;
             this.offscreenCtx.fillRect(0, 0, totalWidth, totalHeight);
           }
           this.offscreenCtx.drawImage(processedCanvas, this.paddingLeft, this.paddingTop);
@@ -1875,42 +1861,20 @@
       if (this.mediaType === 'image') {
         const row = Math.floor(frameIndex / this.columns);
         const col = frameIndex % this.columns;
-
-        this.offscreenCtx.drawImage(
-          this.media,
-          col * this.frameWidth,
-          row * this.frameHeight,
-          this.frameWidth,
-          this.frameHeight,
-          this.paddingLeft,
-          this.paddingTop,
-          this.displayFrameWidth,
-          this.displayFrameHeight
-        );
+        this.offscreenCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
       } else if (this.mediaType === 'video') {
         const img = await this.getVideoFrameImage(frameIndex);
         if (img) {
-          this.offscreenCtx.drawImage(
-            img,
-            0,
-            0,
-            this.frameWidth,
-            this.frameHeight,
-            this.paddingLeft,
-            this.paddingTop,
-            this.displayFrameWidth,
-            this.displayFrameHeight
-          );
+          this.offscreenCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
         }
       }
 
       this.blitToPreview(totalWidth, totalHeight);
     }
 
-    /** Copy offscreen buffer to visible canvas in a single operation to prevent flickering. */
     blitToPreview(width, height) {
       if (this.previewCanvas.width !== width || this.previewCanvas.height !== height) {
-        this.previewCanvas.width = width;
+        this.previewCanvas.width  = width;
         this.previewCanvas.height = height;
       }
       this.previewCtx.clearRect(0, 0, width, height);
@@ -1931,17 +1895,14 @@
       }
 
       const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
-      const optimalGrid = this.calculateOptimalGrid(selectedArray.length);
-      const exportRows = optimalGrid.rows;
-      const exportCols = optimalGrid.cols;
-
-      const totalWidth = this.displayFrameWidth + this.paddingLeft + this.paddingRight;
-      const totalHeight = this.displayFrameHeight + this.paddingTop + this.paddingBottom;
+      const { rows: exportRows, cols: exportCols } = this.calculateOptimalGrid(selectedArray.length);
+      const totalWidth  = this.displayFrameWidth  + this.paddingLeft + this.paddingRight;
+      const totalHeight = this.displayFrameHeight + this.paddingTop  + this.paddingBottom;
 
       const exportCanvas = document.createElement('canvas');
+      exportCanvas.width  = Math.max(1, totalWidth  * exportCols);
+      exportCanvas.height = Math.max(1, totalHeight * exportRows);
       const exportCtx = exportCanvas.getContext('2d');
-      exportCanvas.width = totalWidth * exportCols;
-      exportCanvas.height = totalHeight * exportRows;
 
       if (this.mediaType === 'image') {
         this.exportImageSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight);
@@ -1955,42 +1916,26 @@
         const frameIndex = selectedArray[index];
         const row = Math.floor(frameIndex / this.columns);
         const col = frameIndex % this.columns;
-
         const exportRow = Math.floor(index / exportCols);
         const exportCol = index % exportCols;
 
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width  = Math.max(1, totalWidth);
+        tempCanvas.height = Math.max(1, totalHeight);
+        const tempCtx = tempCanvas.getContext('2d');
+
         if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-          const processedBlob = this.processedFrames.get(frameIndex);
-          const url = URL.createObjectURL(processedBlob);
+          const url = URL.createObjectURL(this.processedFrames.get(frameIndex));
           await new Promise((resolve) => {
             const img = new Image();
             img.onload = () => {
               if (this.backgroundColor !== 'transparent') {
-                if (this.backgroundColor === 'black') {
-                  exportCtx.fillStyle = '#000000';
-                } else if (this.backgroundColor === 'white') {
-                  exportCtx.fillStyle = '#ffffff';
-                } else {
-                  exportCtx.fillStyle = this.backgroundColor;
-                }
-                exportCtx.fillRect(
-                  exportCol * totalWidth,
-                  exportRow * totalHeight,
-                  totalWidth,
-                  totalHeight
-                );
+                tempCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+                  : this.backgroundColor === 'white' ? '#ffffff'
+                  : this.backgroundColor;
+                tempCtx.fillRect(0, 0, totalWidth, totalHeight);
               }
-              exportCtx.drawImage(
-                img,
-                0,
-                0,
-                this.displayFrameWidth,
-                this.displayFrameHeight,
-                exportCol * totalWidth + this.paddingLeft,
-                exportRow * totalHeight + this.paddingTop,
-                this.displayFrameWidth,
-                this.displayFrameHeight
-              );
+              tempCtx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
               URL.revokeObjectURL(url);
               resolve();
             };
@@ -1998,18 +1943,9 @@
             img.src = url;
           });
         } else {
-          exportCtx.drawImage(
-            this.media,
-            col * this.frameWidth,
-            row * this.frameHeight,
-            this.frameWidth,
-            this.frameHeight,
-            exportCol * totalWidth + this.paddingLeft,
-            exportRow * totalHeight + this.paddingTop,
-            this.displayFrameWidth,
-            this.displayFrameHeight
-          );
+          tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
         }
+        exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
       this.downloadCanvas(exportCanvas, exportRows, exportCols);
     }
@@ -2017,45 +1953,28 @@
     async exportVideoSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight) {
       for (let index = 0; index < selectedArray.length; index++) {
         const frameIndex = selectedArray[index];
-
         const exportRow = Math.floor(index / exportCols);
         const exportCol = index % exportCols;
-
         const img = await this.getVideoFrameImage(frameIndex);
         if (!img) continue;
 
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width  = Math.max(1, totalWidth);
+        tempCanvas.height = Math.max(1, totalHeight);
+        const tempCtx = tempCanvas.getContext('2d');
+
         if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-          const processedBlob = this.processedFrames.get(frameIndex);
-          const url = URL.createObjectURL(processedBlob);
+          const url = URL.createObjectURL(this.processedFrames.get(frameIndex));
           await new Promise((resolve) => {
             const processedImg = new Image();
             processedImg.onload = () => {
               if (this.backgroundColor !== 'transparent') {
-                if (this.backgroundColor === 'black') {
-                  exportCtx.fillStyle = '#000000';
-                } else if (this.backgroundColor === 'white') {
-                  exportCtx.fillStyle = '#ffffff';
-                } else {
-                  exportCtx.fillStyle = this.backgroundColor;
-                }
-                exportCtx.fillRect(
-                  exportCol * totalWidth,
-                  exportRow * totalHeight,
-                  totalWidth,
-                  totalHeight
-                );
+                tempCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
+                  : this.backgroundColor === 'white' ? '#ffffff'
+                  : this.backgroundColor;
+                tempCtx.fillRect(0, 0, totalWidth, totalHeight);
               }
-              exportCtx.drawImage(
-                processedImg,
-                0,
-                0,
-                this.displayFrameWidth,
-                this.displayFrameHeight,
-                exportCol * totalWidth + this.paddingLeft,
-                exportRow * totalHeight + this.paddingTop,
-                this.displayFrameWidth,
-                this.displayFrameHeight
-              );
+              tempCtx.drawImage(processedImg, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
               URL.revokeObjectURL(url);
               resolve();
             };
@@ -2063,28 +1982,16 @@
             processedImg.src = url;
           });
         } else {
-          exportCtx.drawImage(
-            img,
-            0,
-            0,
-            this.frameWidth,
-            this.frameHeight,
-            exportCol * totalWidth + this.paddingLeft,
-            exportRow * totalHeight + this.paddingTop,
-            this.displayFrameWidth,
-            this.displayFrameHeight
-          );
+          tempCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
         }
+        exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
       this.downloadCanvas(exportCanvas, exportRows, exportCols);
     }
 
     downloadCanvas(canvas, rows, cols) {
       canvas.toBlob((blob) => {
-        if (!blob) {
-          this.showMessage('Failed to create export image', 'error');
-          return;
-        }
+        if (!blob) { this.showMessage('Failed to create export image', 'error'); return; }
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -2098,9 +2005,7 @@
     showMessage(text, type) {
       this.statusMessage.textContent = text;
       this.statusMessage.className = `status-message show ${type}`;
-      setTimeout(() => {
-        this.statusMessage.classList.remove('show');
-      }, 3000);
+      setTimeout(() => { this.statusMessage.classList.remove('show'); }, 3000);
     }
   }
 
