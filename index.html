@@ -124,7 +124,7 @@
     }
 
     .background-removal-group {
-      display: none;
+      display: none; // this is intentional don't change it
       align-items: flex-end;
       gap: 10px;
       padding: 10px;
@@ -334,6 +334,71 @@
     .padding-control input {
       padding: 8px;
       font-size: 13px;
+    }
+
+    .movement-controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      padding: 15px;
+      background: white;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding-top: 40px;
+      position: relative;
+      grid-column: 1 / -1;
+    }
+
+    .movement-controls::before {
+      content: 'Eliminate Movement';
+      position: absolute;
+      top: 8px;
+      left: 15px;
+      font-weight: 700;
+      color: #333;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .movement-control {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .movement-control label {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .movement-control input[type="number"] {
+      padding: 8px;
+      font-size: 13px;
+    }
+
+    .movement-control.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .movement-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+    }
+
+    .movement-toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .movement-toggle-row label {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 0;
     }
 
     .slider-container {
@@ -738,6 +803,23 @@
       </div>
     </div>
 
+    <div class="movement-controls" id="movementControls">
+      <div class="movement-control">
+        <label for="moveXInput">Horizontal offset / frame (px)</label>
+        <input type="number" id="moveXInput" value="0" step="0.1">
+      </div>
+      <div class="movement-control">
+        <label for="moveYInput">Vertical offset / frame (px)</label>
+        <input type="number" id="moveYInput" value="0" step="0.1">
+      </div>
+      <div class="movement-control full-width">
+        <div class="movement-toggle-row">
+          <input type="checkbox" id="useOriginalIndexCheckbox">
+          <label for="useOriginalIndexCheckbox">Base offset on original frame index (not selection order)</label>
+        </div>
+      </div>
+    </div>
+
     <div class="background-removal-group">
       <div class="background-removal-checkbox">
         <input type="checkbox" id="removeBackgroundCheckbox">
@@ -858,6 +940,9 @@
       this.lastCanvasWidth = 0;
       this.lastCanvasHeight = 0;
       this.originalAspectRatio = 1;
+      this.moveX = 0;
+      this.moveY = 0;
+      this.useOriginalIndex = false;
       this.removeBackgroundConfig = {
         device: this.isSecureOrLocalhost() ? "gpu" : "cpu",
         proxyToWorker: true,
@@ -926,6 +1011,9 @@
       this.frameTotalCountDisplay = document.getElementById('frameTotalCount');
       this.rowsGroup = document.getElementById('rowsGroup');
       this.columnsGroup = document.getElementById('columnsGroup');
+      this.moveXInput = document.getElementById('moveXInput');
+      this.moveYInput = document.getElementById('moveYInput');
+      this.useOriginalIndexCheckbox = document.getElementById('useOriginalIndexCheckbox');
     }
 
     attachEventListeners() {
@@ -975,6 +1063,35 @@
       this.exportBtn.addEventListener('click', () => this.exportSprites());
 
       this.videoElement.addEventListener('loadedmetadata', () => this.onVideoLoaded());
+
+      this.moveXInput.addEventListener('input', () => {
+        this.moveX = parseFloat(this.moveXInput.value) || 0;
+        this.renderFrameGrid();
+        this.needsRender = true;
+      });
+      this.moveYInput.addEventListener('input', () => {
+        this.moveY = parseFloat(this.moveYInput.value) || 0;
+        this.renderFrameGrid();
+        this.needsRender = true;
+      });
+      this.useOriginalIndexCheckbox.addEventListener('change', () => {
+        this.useOriginalIndex = this.useOriginalIndexCheckbox.checked;
+        this.renderFrameGrid();
+        this.needsRender = true;
+      });
+    }
+
+    // Returns {dx, dy} pixel offset to apply when drawing frameIndex.
+    // originalIndex = the frame's index in the sheet/video.
+    // positionInSelected = its position in the sorted selected array (-1 if not selected).
+    getFrameOffset(originalIndex, positionInSelected) {
+      if (this.moveX === 0 && this.moveY === 0) return { dx: 0, dy: 0 };
+      const multiplier = this.useOriginalIndex ? originalIndex : positionInSelected;
+      if (multiplier < 0) return { dx: 0, dy: 0 };
+      return {
+        dx: Math.floor(multiplier * this.moveX),
+        dy: Math.floor(multiplier * this.moveY),
+      };
     }
 
     toggleBackgroundRemoval() {
@@ -1579,6 +1696,10 @@
 
     renderImageFrameGrid() {
       const totalFrames = this.rows * this.columns;
+      // Build map: originalIndex → positionInSelected
+      const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
+      const posMap = new Map(selectedArray.map((fi, pos) => [fi, pos]));
+
       for (let i = 0; i < totalFrames; i++) {
         const frameDiv = document.createElement('div');
         frameDiv.className = this.selectedFrames.has(i) ? 'frame-item included' : 'frame-item excluded';
@@ -1594,6 +1715,9 @@
 
         const row = Math.floor(i / this.columns);
         const col = i % this.columns;
+        const { dx, dy } = this.getFrameOffset(i, posMap.has(i) ? posMap.get(i) : -1);
+        const destX = this.paddingLeft - dx;
+        const destY = this.paddingTop  - dy;
 
         if (this.removeBackground && this.processedFrames.has(i)) {
           const processedBlob = this.processedFrames.get(i);
@@ -1606,12 +1730,12 @@
                 : this.backgroundColor;
               ctx.fillRect(0, 0, totalWidth, totalHeight);
             }
-            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
             URL.revokeObjectURL(url);
           };
           img.src = url;
         } else {
-          ctx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+          ctx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         }
 
         const frameNumber = document.createElement('div');
@@ -1626,6 +1750,9 @@
     }
 
     renderVideoFrameGrid() {
+      const selectedArray = Array.from(this.selectedFrames).sort((a, b) => a - b);
+      const posMap = new Map(selectedArray.map((fi, pos) => [fi, pos]));
+
       this.frames.forEach((frameData, i) => {
         const frameDiv = document.createElement('div');
         frameDiv.className = this.selectedFrames.has(i) ? 'frame-item included' : 'frame-item excluded';
@@ -1639,6 +1766,10 @@
         const ctx = frameCanvas.getContext('2d');
         ctx.clearRect(0, 0, totalWidth, totalHeight);
 
+        const { dx, dy } = this.getFrameOffset(i, posMap.has(i) ? posMap.get(i) : -1);
+        const destX = this.paddingLeft - dx;
+        const destY = this.paddingTop  - dy;
+
         if (this.removeBackground && this.processedFrames.has(i)) {
           const processedBlob = this.processedFrames.get(i);
           const url = URL.createObjectURL(processedBlob);
@@ -1650,14 +1781,14 @@
                 : this.backgroundColor;
               ctx.fillRect(0, 0, totalWidth, totalHeight);
             }
-            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
             URL.revokeObjectURL(url);
           };
           img.src = url;
         } else {
           const img = new Image();
           img.onload = () => {
-            ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+            ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
           };
           img.src = frameData;
         }
@@ -1843,6 +1974,11 @@
       }
       this.offscreenCtx.clearRect(0, 0, totalWidth, totalHeight);
 
+      // currentFrame is the position in selectedFrames (0-based), frameIndex is the original index
+      const { dx, dy } = this.getFrameOffset(frameIndex, currentFrame);
+      const destX = this.paddingLeft - dx;
+      const destY = this.paddingTop  - dy;
+
       if (this.removeBackground && this.processedFrames.has(frameIndex)) {
         const processedCanvas = await this.getProcessedFrameCanvas(frameIndex);
         if (processedCanvas) {
@@ -1852,7 +1988,7 @@
               : this.backgroundColor;
             this.offscreenCtx.fillRect(0, 0, totalWidth, totalHeight);
           }
-          this.offscreenCtx.drawImage(processedCanvas, this.paddingLeft, this.paddingTop);
+          this.offscreenCtx.drawImage(processedCanvas, destX, destY);
           this.blitToPreview(totalWidth, totalHeight);
           return;
         }
@@ -1861,11 +1997,11 @@
       if (this.mediaType === 'image') {
         const row = Math.floor(frameIndex / this.columns);
         const col = frameIndex % this.columns;
-        this.offscreenCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+        this.offscreenCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
       } else if (this.mediaType === 'video') {
         const img = await this.getVideoFrameImage(frameIndex);
         if (img) {
-          this.offscreenCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+          this.offscreenCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         }
       }
 
@@ -1919,6 +2055,10 @@
         const exportRow = Math.floor(index / exportCols);
         const exportCol = index % exportCols;
 
+        const { dx, dy } = this.getFrameOffset(frameIndex, index);
+        const destX = this.paddingLeft - dx;
+        const destY = this.paddingTop  - dy;
+
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width  = Math.max(1, totalWidth);
         tempCanvas.height = Math.max(1, totalHeight);
@@ -1935,7 +2075,7 @@
                   : this.backgroundColor;
                 tempCtx.fillRect(0, 0, totalWidth, totalHeight);
               }
-              tempCtx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+              tempCtx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
               URL.revokeObjectURL(url);
               resolve();
             };
@@ -1943,7 +2083,7 @@
             img.src = url;
           });
         } else {
-          tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+          tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         }
         exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
@@ -1957,6 +2097,10 @@
         const exportCol = index % exportCols;
         const img = await this.getVideoFrameImage(frameIndex);
         if (!img) continue;
+
+        const { dx, dy } = this.getFrameOffset(frameIndex, index);
+        const destX = this.paddingLeft - dx;
+        const destY = this.paddingTop  - dy;
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width  = Math.max(1, totalWidth);
@@ -1974,7 +2118,7 @@
                   : this.backgroundColor;
                 tempCtx.fillRect(0, 0, totalWidth, totalHeight);
               }
-              tempCtx.drawImage(processedImg, 0, 0, this.displayFrameWidth, this.displayFrameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+              tempCtx.drawImage(processedImg, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
               URL.revokeObjectURL(url);
               resolve();
             };
@@ -1982,7 +2126,7 @@
             processedImg.src = url;
           });
         } else {
-          tempCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, this.paddingLeft, this.paddingTop, this.displayFrameWidth, this.displayFrameHeight);
+          tempCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         }
         exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
@@ -2015,4 +2159,3 @@
 </script>
 </body>
 </html>
-
