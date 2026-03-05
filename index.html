@@ -743,7 +743,7 @@
   <h1>🎨 Sprite Sheet Tool</h1>
 
   <div class="controls-section">
-    <div class="drop-zone" id="dropZone">
+    <div class="drop-zone" id="dropZone" title="Drop or click to upload a sprite sheet image (PNG, JPG, GIF) or a video file (MP4, WebM, OGG). Images will be analyzed to detect frame grid layout automatically.">
       <p>📁 Drop your sprite sheet or video here or click to browse</p>
       <small>Supports PNG, JPG, GIF, MP4, WebM, OGG and many more</small>
       <input type="file" id="mediaInput" accept="image/*,video/*">
@@ -751,70 +751,70 @@
 
     <div class="control-group" id="rowsGroup">
       <label for="rowsInput">Rows (for preview)</label>
-      <input type="number" id="rowsInput" min="1" max="100" value="1">
+      <input type="number" id="rowsInput" min="1" max="100" value="1" title="Number of rows in the sprite sheet grid. Each cell is treated as one animation frame. Auto-detected when an image is loaded.">
     </div>
 
     <div class="control-group" id="columnsGroup">
       <label for="columnsInput">Columns (for preview)</label>
-      <input type="number" id="columnsInput" min="1" max="100" value="1">
+      <input type="number" id="columnsInput" min="1" max="100" value="1" title="Number of columns in the sprite sheet grid. Each cell is treated as one animation frame. Auto-detected when an image is loaded.">
     </div>
 
     <div class="fps-controls-group">
       <div class="control-group">
         <label for="animationFpsInput">Animation FPS</label>
-        <input type="number" id="animationFpsInput" min="1" max="60" value="12">
+        <input type="number" id="animationFpsInput" min="1" max="60" value="12" title="Frames per second for the animation preview playback. Higher values make the animation play faster.">
       </div>
     </div>
 
     <div class="fps-controls-group">
       <div class="control-group">
         <label for="videoFpsInput">Video Extraction FPS</label>
-        <input type="number" id="videoFpsInput" min="1" max="60" value="12">
+        <input type="number" id="videoFpsInput" min="1" max="60" value="12" title="How many frames to extract per second from a video file. Higher values produce more frames and smoother animation but take longer to process. Disabled when an image is loaded.">
       </div>
     </div>
 
     <div class="frame-size-section">
       <div class="frame-size-control">
         <label for="frameWidthInput">Frame Width (px)</label>
-        <input type="number" id="frameWidthInput" min="1" value="0">
+        <input type="number" id="frameWidthInput" min="1" value="0" title="Display width of each frame in pixels. Changing this scales the frame while maintaining the original aspect ratio. Affects both the preview and the exported sprite sheet.">
       </div>
       <div class="frame-size-control">
         <label for="frameHeightInput">Frame Height (px)</label>
-        <input type="number" id="frameHeightInput" min="1" value="0">
+        <input type="number" id="frameHeightInput" min="1" value="0" title="Display height of each frame in pixels. Changing this scales the frame while maintaining the original aspect ratio. Affects both the preview and the exported sprite sheet.">
       </div>
     </div>
 
     <div class="padding-controls">
       <div class="padding-control">
         <label for="paddingTopInput">Top (px)</label>
-        <input type="number" id="paddingTopInput" value="0">
+        <input type="number" id="paddingTopInput" value="0" title="Extra transparent space added above the frame content in the output. Useful for giving sprites breathing room or aligning them within a fixed canvas.">
       </div>
       <div class="padding-control">
         <label for="paddingRightInput">Right (px)</label>
-        <input type="number" id="paddingRightInput" value="0">
+        <input type="number" id="paddingRightInput" value="0" title="Extra transparent space added to the right of the frame content in the output.">
       </div>
       <div class="padding-control">
         <label for="paddingBottomInput">Bottom (px)</label>
-        <input type="number" id="paddingBottomInput" value="0">
+        <input type="number" id="paddingBottomInput" value="0" title="Extra transparent space added below the frame content in the output.">
       </div>
       <div class="padding-control">
         <label for="paddingLeftInput">Left (px)</label>
-        <input type="number" id="paddingLeftInput" value="0">
+        <input type="number" id="paddingLeftInput" value="0" title="Extra transparent space added to the left of the frame content in the output.">
       </div>
     </div>
 
     <div class="movement-controls" id="movementControls">
       <div class="movement-control">
         <label for="moveXInput">Horizontal offset / frame (px)</label>
-        <input type="number" id="moveXInput" value="0" step="0.1">
+        <input type="number" id="moveXInput" value="0.0" step="any" title="Shifts each frame horizontally by this amount multiplied by the frame's index. Use a positive value to pan right across frames, negative to pan left. Supports decimals for sub-pixel precision.">
       </div>
       <div class="movement-control">
         <label for="moveYInput">Vertical offset / frame (px)</label>
-        <input type="number" id="moveYInput" value="0" step="0.1">
+        <input type="number" id="moveYInput" value="0.0" step="any" title="Shifts each frame vertically by this amount multiplied by the frame's index. Use a positive value to pan downward across frames, negative to pan upward. Supports decimals for sub-pixel precision.">
       </div>
       <div class="movement-control full-width">
         <div class="movement-toggle-row">
-          <input type="checkbox" id="useOriginalIndexCheckbox">
+          <input type="checkbox" id="useOriginalIndexCheckbox" title="When checked, the offset multiplier is based on the frame's original index in the full sheet/video rather than its position within the current selection. Useful when you skip frames but still want the motion to align with the original sequence.">
           <label for="useOriginalIndexCheckbox">Base offset on original frame index (not selection order)</label>
         </div>
       </div>
@@ -822,10 +822,10 @@
 
     <div class="background-removal-group">
       <div class="background-removal-checkbox">
-        <input type="checkbox" id="removeBackgroundCheckbox">
+        <input type="checkbox" id="removeBackgroundCheckbox" title="Automatically removes the background from each frame using an AI model. Processing happens in your browser — no data is sent to a server. May take a moment per frame.">
         <label for="removeBackgroundCheckbox">Remove Background</label>
       </div>
-      <select id="backgroundColorSelect" class="background-color-select">
+      <select id="backgroundColorSelect" class="background-color-select" title="Choose what color to fill behind the subject after background removal. 'Transparent' preserves the alpha channel in the exported PNG.">
         <option value="transparent">Transparent</option>
         <option value="black">Black</option>
         <option value="white">White</option>
@@ -844,7 +844,7 @@
     </div>
 
     <div class="checkbox-group">
-      <input type="checkbox" id="stretchCheckbox">
+      <input type="checkbox" id="stretchCheckbox" title="Scales the animation preview to fill the preview area while maintaining the frame's original aspect ratio. Does not affect the exported output.">
       <label for="stretchCheckbox">Stretch Preview (Keep Aspect Ratio)</label>
     </div>
   </div>
@@ -857,7 +857,7 @@
     </div>
   </div>
 
-  <div class="main-content">
+  <div class="main-content" id="mainContent" style="display:none">
     <div class="preview-section">
       <div class="preview-header">
         <div class="preview-title" id="previewTitle">Animation Preview</div>
@@ -866,7 +866,7 @@
         <canvas id="previewCanvas"></canvas>
       </div>
       <div class="slider-container">
-        <input type="range" id="frameSlider" min="0" max="0" value="0">
+        <input type="range" id="frameSlider" min="0" max="0" value="0" title="Scrub through selected frames manually. Drag left/right to step through animation frames one by one.">
         <div class="slider-label" id="sliderLabel">Drag to scrub through frames</div>
       </div>
       <div class="stats">
@@ -895,7 +895,7 @@
     </div>
   </div>
 
-  <div class="buttons-section" style="margin-top: 30px; border-top: 2px solid #e0e0e0; padding-top: 30px;">
+  <div class="buttons-section" id="exportSection" style="display:none; margin-top: 30px; border-top: 2px solid #e0e0e0; padding-top: 30px;">
     <button class="btn-success" id="exportBtn" disabled>📥 Export Selected Sprites</button>
   </div>
 </div>
@@ -1014,6 +1014,8 @@
       this.moveXInput = document.getElementById('moveXInput');
       this.moveYInput = document.getElementById('moveYInput');
       this.useOriginalIndexCheckbox = document.getElementById('useOriginalIndexCheckbox');
+      this.mainContent = document.getElementById('mainContent');
+      this.exportSection = document.getElementById('exportSection');
     }
 
     attachEventListeners() {
@@ -1069,16 +1071,36 @@
         this.renderFrameGrid();
         this.needsRender = true;
       });
+      this.moveXInput.addEventListener('blur', () => {
+        this.moveXInput.value = this.formatDecimalInput(this.moveXInput.value);
+      });
       this.moveYInput.addEventListener('input', () => {
         this.moveY = parseFloat(this.moveYInput.value) || 0;
         this.renderFrameGrid();
         this.needsRender = true;
+      });
+      this.moveYInput.addEventListener('blur', () => {
+        this.moveYInput.value = this.formatDecimalInput(this.moveYInput.value);
       });
       this.useOriginalIndexCheckbox.addEventListener('change', () => {
         this.useOriginalIndex = this.useOriginalIndexCheckbox.checked;
         this.renderFrameGrid();
         this.needsRender = true;
       });
+    }
+
+    // Formats a numeric string to always show at least one decimal place.
+    formatDecimalInput(value) {
+      const num = parseFloat(value);
+      if (isNaN(num)) return '0.0';
+      // If it's a whole number, force one decimal digit; otherwise keep as-is (trim trailing zeros beyond 1)
+      if (Number.isInteger(num)) return num.toFixed(1);
+      return String(num);
+    }
+
+    revealMediaSections() {
+      this.mainContent.style.display = '';
+      this.exportSection.style.display = '';
     }
 
     // Returns {dx, dy} pixel offset to apply when drawing frameIndex.
@@ -1345,6 +1367,9 @@
           this.originalAspectRatio = this.frameWidth / this.frameHeight;
           this.updateFrameSizeInputs();
           this.updateGrid();
+          this.videoFpsInput.disabled = true;
+          this.videoFpsInput.closest('.fps-controls-group').style.opacity = '0.5';
+          this.revealMediaSections();
           this.showMessage('Image loaded and scanned for empty frames!', 'success');
         };
         img.src = event.target.result;
@@ -1405,6 +1430,8 @@
       this.lastCanvasWidth = 0;
       this.lastCanvasHeight = 0;
       this.updateGridVisibility();
+      this.videoFpsInput.disabled = false;
+      this.videoFpsInput.closest('.fps-controls-group').style.opacity = '';
     }
 
     onVideoLoaded() {
@@ -1448,6 +1475,7 @@
           this.updateSlider();
           this.updateStats();
           this.startAnimation();
+          this.revealMediaSections();
           this.showMessage(`Successfully extracted ${this.frames.length} frames from video!`, 'success');
           return;
         }
