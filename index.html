@@ -4,12 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sprite Sheet Tool</title>
-  <script type="module">
-    import { removeBackground, preload } from 'https://esm.run/@imgly/background-removal@1.7.0';
-    window.removeBackground = removeBackground;
-    window.preloadRemoveBackground = preload;
-  </script>
-
   <style>
     * {
       margin: 0;
@@ -121,43 +115,6 @@
       margin: 0;
       cursor: pointer;
       font-size: 14px;
-    }
-
-    .background-removal-group {
-      display: none; // this is intentional don't change it
-      align-items: flex-end;
-      gap: 10px;
-      padding: 10px;
-      background: white;
-      border: 2px solid #ddd;
-      border-radius: 5px;
-    }
-
-    .background-removal-checkbox {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .background-removal-checkbox input[type="checkbox"] {
-      margin: 0;
-    }
-
-    .background-removal-checkbox label {
-      margin: 0;
-      cursor: pointer;
-      font-size: 14px;
-      white-space: nowrap;
-    }
-
-    .background-color-select {
-      flex: 1;
-      display: none;
-    }
-
-    .background-color-select.visible {
-      display: block;
     }
 
     .drop-zone {
@@ -309,7 +266,7 @@
     }
 
     .padding-controls::before {
-      content: 'Padding (applied to resized frame)';
+      content: 'Frame Margin (positive = add space, negative = crop)';
       position: absolute;
       top: 8px;
       left: 15px;
@@ -698,43 +655,36 @@
       flex: 1;
     }
 
-    .bg-removal-processing {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
+    .canvas-bg-group {
       display: flex;
       flex-direction: column;
+      gap: 8px;
+    }
+
+    .canvas-bg-row {
+      display: flex;
+      gap: 8px;
       align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      z-index: 10;
-      color: white;
-      font-weight: 600;
-      gap: 10px;
     }
 
-    .bg-removal-progress {
-      width: 80%;
-      max-width: 300px;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 4px;
-      overflow: hidden;
+    .canvas-bg-row select {
+      flex: 1;
     }
 
-    .bg-removal-progress-fill {
-      height: 100%;
-      background: #667eea;
-      width: 0%;
-      transition: width 0.3s;
-      border-radius: 4px;
+    input[type="color"] {
+      width: 40px;
+      height: 38px;
+      padding: 2px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      cursor: pointer;
+      background: none;
+      flex-shrink: 0;
     }
 
-    .bg-removal-text {
-      font-size: 14px;
+    input[type="color"]:focus {
+      outline: none;
+      border-color: #667eea;
     }
   </style>
 </head>
@@ -787,19 +737,19 @@
     <div class="padding-controls">
       <div class="padding-control">
         <label for="paddingTopInput">Top (px)</label>
-        <input type="number" id="paddingTopInput" value="0" title="Extra transparent space added above the frame content in the output. Useful for giving sprites breathing room or aligning them within a fixed canvas.">
+        <input type="number" id="paddingTopInput" value="0" title="Margin added above the frame. Positive values extend the canvas upward (filled with background color). Negative values crop into the top of the frame — useful to trim away excess empty space.">
       </div>
       <div class="padding-control">
         <label for="paddingRightInput">Right (px)</label>
-        <input type="number" id="paddingRightInput" value="0" title="Extra transparent space added to the right of the frame content in the output.">
+        <input type="number" id="paddingRightInput" value="0" title="Margin added to the right of the frame. Positive extends, negative crops. Use negative values to trim unwanted empty space on the right side.">
       </div>
       <div class="padding-control">
         <label for="paddingBottomInput">Bottom (px)</label>
-        <input type="number" id="paddingBottomInput" value="0" title="Extra transparent space added below the frame content in the output.">
+        <input type="number" id="paddingBottomInput" value="0" title="Margin added below the frame. Positive extends, negative crops. Use negative values to trim unwanted empty space at the bottom.">
       </div>
       <div class="padding-control">
         <label for="paddingLeftInput">Left (px)</label>
-        <input type="number" id="paddingLeftInput" value="0" title="Extra transparent space added to the left of the frame content in the output.">
+        <input type="number" id="paddingLeftInput" value="0" title="Margin added to the left of the frame. Positive extends, negative crops. Use negative values to trim unwanted empty space on the left side.">
       </div>
     </div>
 
@@ -820,32 +770,26 @@
       </div>
     </div>
 
-    <div class="background-removal-group">
-      <div class="background-removal-checkbox">
-        <input type="checkbox" id="removeBackgroundCheckbox" title="Automatically removes the background from each frame using an AI model. Processing happens in your browser — no data is sent to a server. May take a moment per frame.">
-        <label for="removeBackgroundCheckbox">Remove Background</label>
+    <div class="control-group" style="gap: 12px;">
+      <div class="canvas-bg-group">
+        <label for="canvasBgSelect">Canvas Background Color</label>
+        <div class="canvas-bg-row">
+          <select id="canvasBgSelect" title="Sets the background color painted behind the frame before drawing. Visible in areas added by positive margins or exposed by movement elimination. Also fills empty grid slots in the exported sprite sheet. 'Transparent' keeps those areas transparent in the exported PNG.">
+            <option value="transparent">Transparent</option>
+            <option value="#ffffff">White</option>
+            <option value="#000000">Black</option>
+            <option value="#00ff00">Green</option>
+            <option value="#ff00ff">Magenta</option>
+            <option value="#custom">Custom…</option>
+          </select>
+          <input type="color" id="canvasBgCustomColor" value="#ffffff" style="display:none" title="Pick a custom background color">
+        </div>
       </div>
-      <select id="backgroundColorSelect" class="background-color-select" title="Choose what color to fill behind the subject after background removal. 'Transparent' preserves the alpha channel in the exported PNG.">
-        <option value="transparent">Transparent</option>
-        <option value="black">Black</option>
-        <option value="white">White</option>
-        <option value="#FF0000">Red</option>
-        <option value="#00FF00">Green</option>
-        <option value="#0000FF">Blue</option>
-        <option value="#FFFF00">Yellow</option>
-        <option value="#FF00FF">Magenta</option>
-        <option value="#00FFFF">Cyan</option>
-        <option value="#FFA500">Orange</option>
-        <option value="#800080">Purple</option>
-        <option value="#FFC0CB">Pink</option>
-        <option value="#A52A2A">Brown</option>
-        <option value="#808080">Gray</option>
-      </select>
-    </div>
 
-    <div class="checkbox-group">
-      <input type="checkbox" id="stretchCheckbox" title="Scales the animation preview to fill the preview area while maintaining the frame's original aspect ratio. Does not affect the exported output.">
-      <label for="stretchCheckbox">Stretch Preview (Keep Aspect Ratio)</label>
+      <div class="checkbox-group" style="margin-top: 4px;">
+        <input type="checkbox" id="stretchCheckbox" title="Scales the animation preview to fill the preview area while maintaining the frame's original aspect ratio. Does not affect the exported output.">
+        <label for="stretchCheckbox">Stretch Preview (Keep Aspect Ratio)</label>
+      </div>
     </div>
   </div>
 
@@ -928,12 +872,8 @@
       this.stretchPreview = false;
       this.needsRender = false;
       this.lastRenderedFrame = -1;
-      this.removeBackground = false;
-      this.backgroundColor = 'transparent';
-      this.processedFrames = new Map();
-      this.processedFrameCanvasCache = new Map();
+      this.canvasBgColor = 'transparent';
       this.videoFrameImageCache = new Map();
-      this.isProcessingBackground = false;
       this.isRendering = false;
       this.offscreenCanvas = null;
       this.offscreenCtx = null;
@@ -943,35 +883,10 @@
       this.moveX = 0;
       this.moveY = 0;
       this.useOriginalIndex = false;
-      this.removeBackgroundConfig = {
-        device: this.isSecureOrLocalhost() ? "gpu" : "cpu",
-        proxyToWorker: true,
-      };
-      this.removeBackgroundModelInitialized = false;
 
       this.initializeElements();
       this.attachEventListeners();
       this.startAnimationLoop();
-
-      if (typeof window.removeBackground === 'undefined') {
-        console.warn('Background removal library not yet loaded. It will be available after a moment.');
-        setTimeout(() => {
-          if (typeof window.removeBackground === 'undefined') {
-            console.error('Background removal library failed to load');
-          } else {
-            this.preloadBackgroundRemovalModel();
-          }
-        }, 3000);
-      } else {
-        this.preloadBackgroundRemovalModel();
-      }
-    }
-
-    async preloadBackgroundRemovalModel() {
-      console.log('initializing background removal model...');
-      await window.preloadRemoveBackground(this.removeBackgroundConfig);
-      console.log('Background removal model initialized');
-      this.removeBackgroundModelInitialized = true;
     }
 
     initializeElements() {
@@ -988,8 +903,8 @@
       this.paddingBottomInput = document.getElementById('paddingBottomInput');
       this.paddingLeftInput = document.getElementById('paddingLeftInput');
       this.stretchCheckbox = document.getElementById('stretchCheckbox');
-      this.removeBackgroundCheckbox = document.getElementById('removeBackgroundCheckbox');
-      this.backgroundColorSelect = document.getElementById('backgroundColorSelect');
+      this.canvasBgSelect = document.getElementById('canvasBgSelect');
+      this.canvasBgCustomColor = document.getElementById('canvasBgCustomColor');
       this.previewCanvas = document.getElementById('previewCanvas');
       this.previewCtx = this.previewCanvas.getContext('2d');
       this.previewContainer = document.getElementById('previewContainer');
@@ -1051,8 +966,13 @@
 
       this.stretchCheckbox.addEventListener('change', () => this.updateStretchPreview());
 
-      this.removeBackgroundCheckbox.addEventListener('change', () => this.toggleBackgroundRemoval());
-      this.backgroundColorSelect.addEventListener('change', () => this.updateBackgroundColor());
+      this.canvasBgSelect.addEventListener('change', () => this.updateCanvasBgColor());
+      this.canvasBgCustomColor.addEventListener('input', () => {
+        this.canvasBgColor = this.canvasBgCustomColor.value;
+        this.updatePreviewContainerBg();
+        this.renderFrameGrid();
+        this.needsRender = true;
+      });
 
       this.frameSlider.addEventListener('mousedown', () => this.onSliderDragStart());
       this.frameSlider.addEventListener('touchstart', () => this.onSliderDragStart());
@@ -1116,188 +1036,39 @@
       };
     }
 
-    toggleBackgroundRemoval() {
-      this.removeBackground = this.removeBackgroundCheckbox.checked;
-      this.backgroundColorSelect.classList.toggle('visible', this.removeBackground);
-
-      if (this.removeBackground) {
-        this.processedFrames.clear();
-        this.processedFrameCanvasCache.clear();
-        this.processAllFramesBackground();
+    updateCanvasBgColor() {
+      const val = this.canvasBgSelect.value;
+      if (val === '#custom') {
+        this.canvasBgCustomColor.style.display = '';
+        this.canvasBgColor = this.canvasBgCustomColor.value;
       } else {
-        this.processedFrames.clear();
-        this.processedFrameCanvasCache.clear();
-        this.hideBgRemovalProgress();
+        this.canvasBgCustomColor.style.display = 'none';
+        this.canvasBgColor = val;
       }
-      this.updatePreviewBackgroundColor();
-    }
-
-    updateBackgroundColor() {
-      this.backgroundColor = this.backgroundColorSelect.value;
-      this.processedFrameCanvasCache.clear();
-      this.updatePreviewBackgroundColor();
-      this.needsRender = true;
-    }
-
-    updatePreviewBackgroundColor() {
-      if (!this.removeBackground) {
-        this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
-        this.previewContainer.style.background = '';
-        return;
-      }
-
-      this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
-      this.previewContainer.style.background = '';
-
-      if (this.backgroundColor === 'transparent') {
-        this.previewContainer.classList.add('bg-transparent');
-      } else if (this.backgroundColor === 'black') {
-        this.previewContainer.classList.add('bg-black');
-      } else if (this.backgroundColor === 'white') {
-        this.previewContainer.classList.add('bg-white');
-      } else {
-        this.previewContainer.style.background = this.backgroundColor;
-      }
-    }
-
-    async processAllFramesBackground() {
-      if (this.frames.length === 0 && this.mediaType !== 'image') return;
-
-      this.isProcessingBackground = true;
-      this.processedFrameCanvasCache.clear();
-      const totalFrames = this.mediaType === 'video' ? this.frames.length : (this.rows * this.columns);
-
-      this.showBgRemovalProgress(0, totalFrames);
-
-      let processed = 0;
-      for (let i = 0; i < totalFrames; i++) {
-        if (!this.removeBackground) break;
-        if (this.processedFrames.has(i)) {
-          processed++;
-          this.showBgRemovalProgress(processed, totalFrames);
-          continue;
-        }
-        await this.processFrameBackground(i);
-        processed++;
-        this.showBgRemovalProgress(processed, totalFrames);
-      }
-
-      this.isProcessingBackground = false;
-      this.hideBgRemovalProgress();
+      this.updatePreviewContainerBg();
       this.renderFrameGrid();
       this.needsRender = true;
     }
 
-    showBgRemovalProgress(current, total) {
-      let overlay = document.getElementById('bgRemovalOverlay');
-      if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'bgRemovalOverlay';
-        overlay.className = 'bg-removal-processing';
-        overlay.innerHTML = `
-          <div class="bg-removal-text">Removing backgrounds... <span id="bgRemovalCount">0</span>/<span id="bgRemovalTotal">0</span></div>
-          <div class="bg-removal-progress">
-            <div class="bg-removal-progress-fill" id="bgRemovalFill"></div>
-          </div>
-        `;
-        this.previewContainer.style.position = 'relative';
-        this.previewContainer.appendChild(overlay);
-      }
-      const countEl = document.getElementById('bgRemovalCount');
-      const totalEl = document.getElementById('bgRemovalTotal');
-      const fillEl = document.getElementById('bgRemovalFill');
-      if (countEl) countEl.textContent = current;
-      if (totalEl) totalEl.textContent = total;
-      if (fillEl) fillEl.style.width = (total > 0 ? (current / total) * 100 : 0) + '%';
-    }
-
-    hideBgRemovalProgress() {
-      const overlay = document.getElementById('bgRemovalOverlay');
-      if (overlay) overlay.remove();
-    }
-
-    async processFrameBackground(frameIndex) {
-      try {
-        let canvas = document.createElement('canvas');
-
-        if (this.mediaType === 'image') {
-          canvas.width = this.frameWidth;
-          canvas.height = this.frameHeight;
-          const ctx = canvas.getContext('2d');
-          const row = Math.floor(frameIndex / this.columns);
-          const col = frameIndex % this.columns;
-          ctx.drawImage(
-            this.media,
-            col * this.frameWidth, row * this.frameHeight,
-            this.frameWidth, this.frameHeight,
-            0, 0, this.frameWidth, this.frameHeight
-          );
-        } else if (this.mediaType === 'video') {
-          const img = await this.getVideoFrameImage(frameIndex);
-          if (!img) return;
-          canvas.width = this.frameWidth;
-          canvas.height = this.frameHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight);
-        }
-
-        const blob = await this.canvasToBlob(canvas);
-        const result = await window.removeBackground(blob, this.removeBackgroundConfig);
-        this.processedFrames.set(frameIndex, result);
-      } catch (error) {
-        console.error(`Error processing frame ${frameIndex}:`, error);
-        this.showMessage(`Error processing frame ${frameIndex}`, 'error');
+    updatePreviewContainerBg() {
+      this.previewContainer.classList.remove('bg-transparent', 'bg-black', 'bg-white');
+      this.previewContainer.style.background = '';
+      if (this.canvasBgColor === 'transparent') {
+        this.previewContainer.classList.add('bg-transparent');
+      } else if (this.canvasBgColor === '#000000') {
+        this.previewContainer.classList.add('bg-black');
+      } else if (this.canvasBgColor === '#ffffff') {
+        this.previewContainer.classList.add('bg-white');
+      } else {
+        this.previewContainer.style.background = this.canvasBgColor;
       }
     }
 
-    isSecureOrLocalhost() {
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      return protocol === "https:" || hostname === "localhost" || hostname === "127.0.0.1";
-    }
-
-    canvasToBlob(canvas) {
-      return new Promise((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Failed to create blob from canvas'));
-        }, 'image/png');
-      });
-    }
-
-    async getProcessedFrameCanvas(frameIndex) {
-      if (!this.removeBackground || !this.processedFrames.has(frameIndex)) return null;
-
-      const cacheKey = `${frameIndex}_${this.displayFrameWidth}_${this.displayFrameHeight}_${this.backgroundColor}`;
-      if (this.processedFrameCanvasCache.has(cacheKey)) {
-        return this.processedFrameCanvasCache.get(cacheKey);
-      }
-
-      const blob = this.processedFrames.get(frameIndex);
-      const url = URL.createObjectURL(blob);
-
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = this.displayFrameWidth;
-          canvas.height = this.displayFrameHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          if (this.backgroundColor !== 'transparent') {
-            ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-              : this.backgroundColor === 'white' ? '#ffffff'
-              : this.backgroundColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-          }
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          URL.revokeObjectURL(url);
-          this.processedFrameCanvasCache.set(cacheKey, canvas);
-          resolve(canvas);
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-        img.src = url;
-      });
+    // Fills the canvas background before drawing frame content.
+    fillCanvasBg(ctx, width, height) {
+      if (this.canvasBgColor === 'transparent') return;
+      ctx.fillStyle = this.canvasBgColor;
+      ctx.fillRect(0, 0, width, height);
     }
 
     getVideoFrameImage(frameIndex) {
@@ -1353,13 +1124,7 @@
           this.media = img;
           this.mediaType = 'image';
           this.frames = [];
-          this.processedFrames.clear();
-          this.processedFrameCanvasCache.clear();
           this.videoFrameImageCache.clear();
-          this.removeBackgroundCheckbox.checked = false;
-          this.removeBackground = false;
-          this.backgroundColorSelect.classList.remove('visible');
-          this.hideBgRemovalProgress();
           this.lastCanvasWidth = 0;
           this.lastCanvasHeight = 0;
           this.analyzeImage();
@@ -1420,13 +1185,7 @@
       this.mediaType = 'video';
       this.media = null;
       this.frames = [];
-      this.processedFrames.clear();
-      this.processedFrameCanvasCache.clear();
       this.videoFrameImageCache.clear();
-      this.removeBackgroundCheckbox.checked = false;
-      this.removeBackground = false;
-      this.backgroundColorSelect.classList.remove('visible');
-      this.hideBgRemovalProgress();
       this.lastCanvasWidth = 0;
       this.lastCanvasHeight = 0;
       this.updateGridVisibility();
@@ -1662,7 +1421,6 @@
         this.displayFrameWidth = this.displayFrameHeight * this.originalAspectRatio;
         this.frameWidthInput.value = Math.round(this.displayFrameWidth);
       }
-      this.processedFrameCanvasCache.clear();
       this.renderFrameGrid();
       this.updateStats();
       this.needsRender = true;
@@ -1673,7 +1431,6 @@
       this.paddingRight  = parseInt(this.paddingRightInput.value)  || 0;
       this.paddingBottom = parseInt(this.paddingBottomInput.value) || 0;
       this.paddingLeft   = parseInt(this.paddingLeftInput.value)   || 0;
-      this.processedFrameCanvasCache.clear();
       this.renderFrameGrid();
       this.needsRender = true;
     }
@@ -1704,9 +1461,6 @@
         this.displayFrameHeight = this.frameHeight;
         this.frameWidthInput.value  = Math.round(this.displayFrameWidth);
         this.frameHeightInput.value = Math.round(this.displayFrameHeight);
-
-        this.processedFrames.clear();
-        this.processedFrameCanvasCache.clear();
 
         // Scan frames and deselect empty ones automatically
         this.autoSelectNonEmptyFrames();
@@ -1740,6 +1494,7 @@
         frameCanvas.height = totalHeight;
         const ctx = frameCanvas.getContext('2d');
         ctx.clearRect(0, 0, totalWidth, totalHeight);
+        this.fillCanvasBg(ctx, totalWidth, totalHeight);
 
         const row = Math.floor(i / this.columns);
         const col = i % this.columns;
@@ -1747,24 +1502,7 @@
         const destX = this.paddingLeft - dx;
         const destY = this.paddingTop  - dy;
 
-        if (this.removeBackground && this.processedFrames.has(i)) {
-          const processedBlob = this.processedFrames.get(i);
-          const url = URL.createObjectURL(processedBlob);
-          const img = new Image();
-          img.onload = () => {
-            if (this.backgroundColor !== 'transparent') {
-              ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-                : this.backgroundColor === 'white' ? '#ffffff'
-                : this.backgroundColor;
-              ctx.fillRect(0, 0, totalWidth, totalHeight);
-            }
-            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-            URL.revokeObjectURL(url);
-          };
-          img.src = url;
-        } else {
-          ctx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-        }
+        ctx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
 
         const frameNumber = document.createElement('div');
         frameNumber.className = 'frame-number';
@@ -1793,33 +1531,17 @@
         frameCanvas.height = totalHeight;
         const ctx = frameCanvas.getContext('2d');
         ctx.clearRect(0, 0, totalWidth, totalHeight);
+        this.fillCanvasBg(ctx, totalWidth, totalHeight);
 
         const { dx, dy } = this.getFrameOffset(i, posMap.has(i) ? posMap.get(i) : -1);
         const destX = this.paddingLeft - dx;
         const destY = this.paddingTop  - dy;
 
-        if (this.removeBackground && this.processedFrames.has(i)) {
-          const processedBlob = this.processedFrames.get(i);
-          const url = URL.createObjectURL(processedBlob);
-          const img = new Image();
-          img.onload = () => {
-            if (this.backgroundColor !== 'transparent') {
-              ctx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-                : this.backgroundColor === 'white' ? '#ffffff'
-                : this.backgroundColor;
-              ctx.fillRect(0, 0, totalWidth, totalHeight);
-            }
-            ctx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-            URL.revokeObjectURL(url);
-          };
-          img.src = url;
-        } else {
-          const img = new Image();
-          img.onload = () => {
-            ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-          };
-          img.src = frameData;
-        }
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
+        };
+        img.src = frameData;
 
         const frameNumber = document.createElement('div');
         frameNumber.className = 'frame-number';
@@ -2001,26 +1723,12 @@
         this.offscreenCanvas.height = totalHeight;
       }
       this.offscreenCtx.clearRect(0, 0, totalWidth, totalHeight);
+      this.fillCanvasBg(this.offscreenCtx, totalWidth, totalHeight);
 
       // currentFrame is the position in selectedFrames (0-based), frameIndex is the original index
       const { dx, dy } = this.getFrameOffset(frameIndex, currentFrame);
       const destX = this.paddingLeft - dx;
       const destY = this.paddingTop  - dy;
-
-      if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-        const processedCanvas = await this.getProcessedFrameCanvas(frameIndex);
-        if (processedCanvas) {
-          if (this.backgroundColor !== 'transparent') {
-            this.offscreenCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-              : this.backgroundColor === 'white' ? '#ffffff'
-              : this.backgroundColor;
-            this.offscreenCtx.fillRect(0, 0, totalWidth, totalHeight);
-          }
-          this.offscreenCtx.drawImage(processedCanvas, destX, destY);
-          this.blitToPreview(totalWidth, totalHeight);
-          return;
-        }
-      }
 
       if (this.mediaType === 'image') {
         const row = Math.floor(frameIndex / this.columns);
@@ -2068,6 +1776,9 @@
       exportCanvas.height = Math.max(1, totalHeight * exportRows);
       const exportCtx = exportCanvas.getContext('2d');
 
+      // Fill the whole export canvas first so empty grid slots use the background color
+      this.fillCanvasBg(exportCtx, exportCanvas.width, exportCanvas.height);
+
       if (this.mediaType === 'image') {
         this.exportImageSprites(exportCanvas, exportCtx, selectedArray, exportRows, exportCols, totalWidth, totalHeight);
       } else if (this.mediaType === 'video') {
@@ -2091,28 +1802,8 @@
         tempCanvas.width  = Math.max(1, totalWidth);
         tempCanvas.height = Math.max(1, totalHeight);
         const tempCtx = tempCanvas.getContext('2d');
-
-        if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-          const url = URL.createObjectURL(this.processedFrames.get(frameIndex));
-          await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              if (this.backgroundColor !== 'transparent') {
-                tempCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-                  : this.backgroundColor === 'white' ? '#ffffff'
-                  : this.backgroundColor;
-                tempCtx.fillRect(0, 0, totalWidth, totalHeight);
-              }
-              tempCtx.drawImage(img, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-            img.src = url;
-          });
-        } else {
-          tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-        }
+        this.fillCanvasBg(tempCtx, tempCanvas.width, tempCanvas.height);
+        tempCtx.drawImage(this.media, col * this.frameWidth, row * this.frameHeight, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
       this.downloadCanvas(exportCanvas, exportRows, exportCols);
@@ -2134,28 +1825,8 @@
         tempCanvas.width  = Math.max(1, totalWidth);
         tempCanvas.height = Math.max(1, totalHeight);
         const tempCtx = tempCanvas.getContext('2d');
-
-        if (this.removeBackground && this.processedFrames.has(frameIndex)) {
-          const url = URL.createObjectURL(this.processedFrames.get(frameIndex));
-          await new Promise((resolve) => {
-            const processedImg = new Image();
-            processedImg.onload = () => {
-              if (this.backgroundColor !== 'transparent') {
-                tempCtx.fillStyle = this.backgroundColor === 'black' ? '#000000'
-                  : this.backgroundColor === 'white' ? '#ffffff'
-                  : this.backgroundColor;
-                tempCtx.fillRect(0, 0, totalWidth, totalHeight);
-              }
-              tempCtx.drawImage(processedImg, 0, 0, this.displayFrameWidth, this.displayFrameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            processedImg.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-            processedImg.src = url;
-          });
-        } else {
-          tempCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
-        }
+        this.fillCanvasBg(tempCtx, tempCanvas.width, tempCanvas.height);
+        tempCtx.drawImage(img, 0, 0, this.frameWidth, this.frameHeight, destX, destY, this.displayFrameWidth, this.displayFrameHeight);
         exportCtx.drawImage(tempCanvas, exportCol * totalWidth, exportRow * totalHeight);
       }
       this.downloadCanvas(exportCanvas, exportRows, exportCols);
